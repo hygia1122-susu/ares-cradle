@@ -19,43 +19,6 @@ export const FieldNotebookModal: React.FC<FieldNotebookModalProps> = ({ onClose 
     coreLesson: string;
     points: { id: string; title: string; kid: string; field: string; source: string; sourceUrl: string; credit: string; boundary: string }[];
   }> = {
-    impact: {
-      title: 'Echo Crater',
-      question: 'What clues link an impact event to the surrounding rocks and landscape?',
-      coreLesson: 'A strange rock is a clue. Its appearance alone cannot prove where it came from without chemical and orbital context.',
-      points: [
-        {
-          id: 'H1',
-          title: 'Crater Rim & Ejecta Blanket',
-          kid: 'Meteoroids crash into Mars so fast they gouge deep bowls and splash rocks outward like a puddle!',
-          field: 'High-velocity shockwaves excavate target crust, creating an overturned stratigraphy flap and radial rays.',
-          source: 'NASA InSight Mars Lander',
-          sourceUrl: 'https://www.nasa.gov/missions/insight/nasas-insight-hears-its-first-meteoroid-impacts-on-mars/',
-          credit: 'NASA / JPL-Caltech / CNES / IPGP',
-          boundary: 'Seismic amplitude depends on ground transmission distance, not purely meteorite size.'
-        },
-        {
-          id: 'H2',
-          title: 'Before & After Orbital Imagery',
-          kid: 'Satellites orbiting Mars take pictures before and after to spot fresh dark impact blast zones.',
-          field: 'HiRISE satellite images verify ground craters matched from seismic acoustic coordinates down to sub-meter resolution.',
-          source: 'Mars Reconnaissance Orbiter (HiRISE)',
-          sourceUrl: 'https://trek.nasa.gov/mars/',
-          credit: 'NASA / JPL-Caltech / University of Arizona',
-          boundary: 'Orbital imagery captures surface albedo shifts; deep subsurface fracturing requires radar modeling.'
-        },
-        {
-          id: 'H3',
-          title: 'Candidate Meteorite vs Basalt',
-          kid: 'Not every dark rock fell from space. Real meteorites usually have a melted glassy crust from flying through air.',
-          field: 'Hypersonic entry friction melts an outer fusion crust; indigenous Mars basalt lacks this quench texture.',
-          source: 'Mars Exploration Program',
-          sourceUrl: 'https://science.nasa.gov/resource/listen-to-a-meteoroid-hitting-the-red-planet/',
-          credit: 'NASA Science',
-          boundary: 'Visual color or magnetism alone cannot verify extraterrestrial origin without mass spectrometry.'
-        }
-      ]
-    },
     dust: {
       title: 'Wind Basin',
       question: 'How do wind patterns move fine dust, and how does dust affect solar energy systems?',
@@ -90,43 +53,6 @@ export const FieldNotebookModal: React.FC<FieldNotebookModalProps> = ({ onClose 
           sourceUrl: 'https://ccmc.gsfc.nasa.gov/tools/DONKI/',
           credit: 'NASA GSFC',
           boundary: 'Solar particle events (SPE) from space weather are distinct from tropospheric dust circulation.'
-        }
-      ]
-    },
-    volcano: {
-      title: 'Black Rock Terrace',
-      question: 'How does rock layer superposition reveal the chronological timeline of ancient volcanic eruptions?',
-      coreLesson: 'A layer on top was laid down later than the layer beneath it. Relative order tells history without needing rock dates.',
-      points: [
-        {
-          id: 'V1',
-          title: 'Lava Sheet Superposition Margin',
-          kid: 'When new lava spills over older ground, it freezes on top. Top is always younger!',
-          field: 'Law of Superposition: In undeformed volcanic and sedimentary sequences, younger rock units overlie older.',
-          source: 'Lava Flows Near Olympus Mons',
-          sourceUrl: 'https://science.nasa.gov/resource/lava-flow-near-the-base-of-olympus-mons/',
-          credit: 'ESA / DLR / NASA JPL',
-          boundary: 'Superposition gives relative sequence of events; absolute age requires isotope dating.'
-        },
-        {
-          id: 'V2',
-          title: 'Collapsed Lava Tube Conduit',
-          kid: 'Underground lava rivers left hollow caves. Hollow tubes could protect astronauts from space radiation!',
-          field: 'Intact basalt lava tubes provide meters of overhead regolith shielding against galactic cosmic rays (GCR).',
-          source: 'NASA RadLab Subsurface Radiation Study',
-          sourceUrl: 'https://visualization.osdr.nasa.gov/radlab/gui/data-api/',
-          credit: 'NASA RadLab / OSDR',
-          boundary: 'Natural caves require structural survey to verify roof stability and seal airtightness.'
-        },
-        {
-          id: 'V3',
-          title: 'Vesicular Basalt vs Ash Tuff',
-          kid: 'The little bubbles inside volcanic rocks are holes where gas puffed out as the rock cooled down.',
-          field: 'Vesicle density indicates dissolved volatile content and ambient atmospheric pressure during effusion.',
-          source: 'Mars Science Laboratory Curiosity Petrology',
-          sourceUrl: 'https://trek.nasa.gov/mars/',
-          credit: 'NASA / JPL-Caltech',
-          boundary: 'Vesicle texture shows eruptive cooling style, not the duration of the whole volcanic province.'
         }
       ]
     },

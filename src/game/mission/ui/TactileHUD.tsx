@@ -23,9 +23,7 @@ interface TactileHUDProps {
 }
 
 const REGION_COORDS: Record<RegionId, [number, number, number]> = {
-  impact: [-200, 0, -170],
   dust: [0, 0, 0],
-  volcano: [-210, 0, 180],
   ice: [210, 0, -180],
   lake: [200, 0, 170],
 };
@@ -67,10 +65,10 @@ export const TactileHUD: React.FC<TactileHUDProps> = ({ onToggleSound, isMuted =
     objectiveText = 'Select 1 priority engineering job (2 EU) to apply operational upgrade.';
   } else if (!currentSurvey.reportCompleted) {
     objectiveText = 'Finalize and file region scientific report.';
-  } else if (completedReports.length < 5) {
-    objectiveText = `Region complete! Travel to remaining outposts (${completedReports.length}/5 done).`;
+  } else if (completedReports.length < 3) {
+    objectiveText = `Region complete! Travel to remaining outposts (${completedReports.length}/3 done).`;
   } else {
-    objectiveText = '🌟 ALL 5 REGION REPORTS FILED! Open Finale Review to certify base for Ares-1.';
+    objectiveText = '🌟 ALL 3 REGION REPORTS FILED! Open Finale Review to certify base for Ares-1.';
   }
 
   // Keyboard shortcut listeners
@@ -122,7 +120,7 @@ export const TactileHUD: React.FC<TactileHUDProps> = ({ onToggleSound, isMuted =
               <span>•</span>
               <span>{timeOfDay}</span>
               <span>•</span>
-              <span className="text-[#00D2FF]">Reports: {completedReports.length}/5</span>
+              <span className="text-[#00D2FF]">Reports: {completedReports.length}/3</span>
             </div>
           </div>
         </div>
@@ -197,13 +195,13 @@ export const TactileHUD: React.FC<TactileHUDProps> = ({ onToggleSound, isMuted =
             <span>MAP [M]</span>
           </button>
 
-          {/* Finale Button if all 5 completed */}
-          {completedReports.length >= 5 && (
+          {/* Finale Button if all 3 completed */}
+          {completedReports.length >= 3 && (
             <button
               type="button"
               onClick={() => setModal('finale')}
               className="px-3 py-2 rounded-lg font-mono text-xs font-bold bg-[#FF5A1F] hover:bg-[#ff723f] text-black border border-[#FF5A1F] flex items-center gap-1.5 animate-pulse shadow-lg"
-              title="All 5 regions completed! Open Finale Review"
+              title="All 3 regions completed! Open Finale Review"
             >
               <Radio className="w-4 h-4" />
               <span>FINALE REVIEW</span>
@@ -224,32 +222,18 @@ export const TactileHUD: React.FC<TactileHUDProps> = ({ onToggleSound, isMuted =
         </div>
       </div>
 
-      {/* Center Tactical Notification Toast */}
+      {/* Top Floating Notification Toast (Clean, doesn't block center crosshair) */}
       {recentNotification && (
-        <div className="mx-auto pointer-events-auto max-w-xl transition-all duration-300">
-          <div className="px-4 py-2.5 bg-[#1C2026]/95 backdrop-blur-md border border-[#FF5A1F]/50 text-[#F4F1EA] rounded-lg shadow-2xl flex items-center gap-3">
+        <div className="mx-auto pointer-events-auto max-w-xl transition-all duration-300 mt-2">
+          <div className="px-4 py-2 bg-[#1C2026]/95 backdrop-blur-md border border-[#FF5A1F]/50 text-[#F4F1EA] rounded-lg shadow-xl flex items-center gap-3">
             <span className="w-2 h-2 rounded-full bg-[#00D2FF]" />
             <span className="text-xs font-mono font-medium leading-relaxed">{recentNotification}</span>
           </div>
         </div>
       )}
 
-      {/* Interactive Outpost Airlock Prompt */}
-      {isNearBase && activeModal === null && (
-        <div className="mx-auto pointer-events-auto transition-all animate-bounce">
-          <button
-            type="button"
-            onClick={() => setModal('base')}
-            className="px-5 py-2.5 bg-[#00D2FF] hover:bg-[#3cdcff] text-black font-bold font-mono text-xs uppercase rounded-full shadow-[0_0_20px_rgba(0,210,255,0.5)] flex items-center gap-2 border-2 border-white"
-          >
-            <Building2 className="w-4 h-4" />
-            <span>Near {bases[currentRegion]?.name} Airlock — Press [E] to Enter Terminal</span>
-          </button>
-        </div>
-      )}
-
       {/* Bottom Bar: Invariant I09 Resource Gauges & Context Prompt */}
-      <div className="flex flex-wrap items-end justify-between gap-4 pointer-events-auto">
+      <div className="flex flex-wrap items-end justify-between gap-4 pointer-events-auto mt-auto">
         {/* Left: Tactile Hardware Resource Dials */}
         <div className="flex items-center gap-2 bg-[#1C2026]/90 backdrop-blur-md p-2.5 rounded-lg border border-[#F4F1EA]/20 shadow-lg">
           {/* Energy Dial */}
@@ -289,15 +273,28 @@ export const TactileHUD: React.FC<TactileHUDProps> = ({ onToggleSound, isMuted =
           </div>
         </div>
 
-        {/* Right: Tactile Context Pill */}
-        <div className="bg-[#1C2026]/90 backdrop-blur-md px-4 py-2.5 rounded-lg border border-[#F4F1EA]/20 shadow-lg text-xs font-mono text-[#F4F1EA]/80 flex items-center gap-3">
-          <span>Controls: <strong className="text-[#00D2FF]">WASD</strong> Drive/Move</span>
-          <span>•</span>
-          <span><strong className="text-[#00D2FF]">[B]</strong> Base Terminal</span>
-          <span>•</span>
-          <span><strong className="text-[#00D2FF]">[M]</strong> Map</span>
-          <span>•</span>
-          <span><strong className="text-[#00D2FF]">[N]</strong> Notebook</span>
+        {/* Right: Tactile Context Pill & Airlock Access */}
+        <div className="flex items-center gap-2">
+          {isNearBase && activeModal === null && (
+            <button
+              type="button"
+              onClick={() => setModal('base')}
+              className="bg-[#00D2FF] hover:bg-[#3cdcff] text-black font-mono text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,210,255,0.4)] border border-white animate-pulse transition-all cursor-pointer"
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span>[E] OPEN BASE TERMINAL</span>
+            </button>
+          )}
+
+          <div className="bg-[#1C2026]/90 backdrop-blur-md px-4 py-2.5 rounded-lg border border-[#F4F1EA]/20 shadow-lg text-xs font-mono text-[#F4F1EA]/80 flex items-center gap-3">
+            <span>Controls: <strong className="text-[#00D2FF]">WASD</strong></span>
+            <span>•</span>
+            <span><strong className="text-[#00D2FF]">[B]</strong> Base</span>
+            <span>•</span>
+            <span><strong className="text-[#00D2FF]">[M]</strong> Map</span>
+            <span>•</span>
+            <span><strong className="text-[#00D2FF]">[N]</strong> Notes</span>
+          </div>
         </div>
       </div>
     </div>

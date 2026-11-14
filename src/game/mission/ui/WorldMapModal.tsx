@@ -8,33 +8,17 @@ interface WorldMapModalProps {
 }
 
 const REGION_MAP_INFO: Record<RegionId, { name: string; code: string; x: number; y: number; color: string; desc: string }> = {
-  impact: {
-    name: 'Echo Crater',
-    code: 'SECTOR-01 · IMPACT',
-    x: 20, // percentage for SVG
-    y: 25,
-    color: '#FF5A1F',
-    desc: 'Impact crater bowl, raised rim, and ejecta blanket with seismic monitoring station.'
-  },
   dust: {
     name: 'Wind Basin',
-    code: 'SECTOR-02 · WIND',
+    code: 'SECTOR-01 · WIND',
     x: 50,
     y: 50,
     color: '#FFB800',
     desc: 'Central dust bowl, anemometer wind mast, and primary photovoltaic solar farm.'
   },
-  volcano: {
-    name: 'Black Rock Terrace',
-    code: 'SECTOR-03 · VOLCANO',
-    x: 18,
-    y: 80,
-    color: '#E63946',
-    desc: 'Basalt terraces, collapsed lava tube channel, and geothermal research outpost.'
-  },
   ice: {
     name: 'Sealed Ice Cliff',
-    code: 'SECTOR-04 · ICE',
+    code: 'SECTOR-02 · ICE',
     x: 82,
     y: 22,
     color: '#00D2FF',
@@ -42,7 +26,7 @@ const REGION_MAP_INFO: Record<RegionId, { name: string; code: string; x: number;
   },
   lake: {
     name: 'Ancient Lake Shore',
-    code: 'SECTOR-05 · LAKE',
+    code: 'SECTOR-03 · LAKE',
     x: 80,
     y: 78,
     color: '#2A9D8F',

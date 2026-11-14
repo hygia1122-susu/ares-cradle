@@ -8,26 +8,6 @@ interface EngineeringJobModalProps {
 }
 
 const REGION_JOBS: Record<RegionId, SecondaryJobDefinition[]> = {
-  impact: [
-    {
-      id: 'job_impact_protect',
-      title: 'Protected Nitrogen-Sealed Sample Vault',
-      description: 'Install hermetic nitrogen lockers to preserve delicate meteorite specimens for deep Earth laboratory analysis.',
-      cost: { energy: 2, meals: 0, water: 0, airPacks: 0 },
-      outputKey: 'sampleLayout',
-      outputValue: 'protected',
-      readout: 'Specimens secured in hermetic vaults. Long-term curatorial preservation prioritized.'
-    },
-    {
-      id: 'job_impact_access',
-      title: 'Accessible Workspace Sample Racks',
-      description: 'Mount open-access racks next to the analytical mass spectrometer for instant comparison during sorties.',
-      cost: { energy: 2, meals: 0, water: 0, airPacks: 0 },
-      outputKey: 'sampleLayout',
-      outputValue: 'accessible',
-      readout: 'Specimens mounted on instant analysis racks beside microscope for active shifts.'
-    }
-  ],
   dust: [
     {
       id: 'job_dust_clean',
@@ -48,26 +28,6 @@ const REGION_JOBS: Record<RegionId, SecondaryJobDefinition[]> = {
       outputValue: true,
       waterBonus: 2,
       readout: 'Greywater batch processed and sanitized (+2 Clean Water certified).'
-    }
-  ],
-  volcano: [
-    {
-      id: 'job_volcano_passive',
-      title: 'Passive Aerogel Thermal Insulation Barrier',
-      description: 'Wrap habitat bulkheads in silica aerogel blankets to prevent overnight thermal leakage.',
-      cost: { energy: 2, meals: 0, water: 0, airPacks: 0 },
-      outputKey: 'thermalUpgrade',
-      outputValue: 'passive',
-      readout: 'Passive aerogel shields installed. Night thermal loss reduced by 40%.'
-    },
-    {
-      id: 'job_volcano_active',
-      title: 'Active Specimen Workbench Heating Coil',
-      description: 'Install resistive warming coils along scientific datapad tables for rapid instrument startup.',
-      cost: { energy: 2, meals: 0, water: 0, airPacks: 0 },
-      outputKey: 'thermalUpgrade',
-      outputValue: 'active',
-      readout: 'Active workbench heaters powered. Scientific instrumentation warmed for instant use.'
     }
   ],
   ice: [

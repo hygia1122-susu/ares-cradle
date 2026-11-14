@@ -95,54 +95,22 @@ interface MissionStoreState {
 }
 
 const REGION_COORDINATES: Record<RegionId, [number, number, number]> = {
-  impact: [-200, 0, -170],
   dust: [0, 0, 0],
-  volcano: [-210, 0, 180],
   ice: [210, 0, -180],
   lake: [200, 0, 170],
 };
 
 const DEFAULT_ROVER_POSES: Record<RegionId, [number, number, number]> = {
-  impact: [-195, 0, -165],
   dust: [5, 0, 8],
-  volcano: [-205, 0, 185],
   ice: [215, 0, -175],
   lake: [205, 0, 175],
 };
 
 const createInitialBases = (): Record<RegionId, BaseState> => ({
-  impact: {
-    id: 'impact',
-    name: 'Echo Crater Station',
-    isDiscovered: false,
-    resources: { ...INITIAL_BASE_RESOURCES },
-    safetyChecks: { diagnostics: false, shelter: false, comms: false },
-    sampleLayout: 'standard',
-    panelsClean: false,
-    thermalUpgrade: 'standard',
-    coreAnalysis: 'none',
-    waterCleaned: false,
-    transmit: 'standard',
-    roverInspection: 'none',
-  },
   dust: {
     id: 'dust',
     name: 'Wind Basin Central Outpost',
     isDiscovered: true, // Starting base
-    resources: { ...INITIAL_BASE_RESOURCES },
-    safetyChecks: { diagnostics: false, shelter: false, comms: false },
-    sampleLayout: 'standard',
-    panelsClean: false,
-    thermalUpgrade: 'standard',
-    coreAnalysis: 'none',
-    waterCleaned: false,
-    transmit: 'standard',
-    roverInspection: 'none',
-  },
-  volcano: {
-    id: 'volcano',
-    name: 'Black Rock Terrace Outpost',
-    isDiscovered: false,
     resources: { ...INITIAL_BASE_RESOURCES },
     safetyChecks: { diagnostics: false, shelter: false, comms: false },
     sampleLayout: 'standard',
@@ -184,33 +152,9 @@ const createInitialBases = (): Record<RegionId, BaseState> => ({
 });
 
 const createInitialSurveys = (): Record<RegionId, RegionSurveyState> => ({
-  impact: {
-    regionId: 'impact',
-    supportBaseId: 'impact',
-    focalPointsDone: [],
-    optionalBranchesDone: [],
-    unlockedPerkIds: [],
-    essentialShiftPaid: false,
-    minigameCompleted: false,
-    secondaryJobSelected: null,
-    secondaryJobDeferred: null,
-    reportCompleted: false,
-  },
   dust: {
     regionId: 'dust',
     supportBaseId: 'dust',
-    focalPointsDone: [],
-    optionalBranchesDone: [],
-    unlockedPerkIds: [],
-    essentialShiftPaid: false,
-    minigameCompleted: false,
-    secondaryJobSelected: null,
-    secondaryJobDeferred: null,
-    reportCompleted: false,
-  },
-  volcano: {
-    regionId: 'volcano',
-    supportBaseId: 'volcano',
     focalPointsDone: [],
     optionalBranchesDone: [],
     unlockedPerkIds: [],
@@ -312,7 +256,7 @@ export const useMissionStore = create<MissionStoreState>((set, get) => {
     isTransmittingProposal: false,
     activeModal: null,
     activeMinigameId: null,
-    recentNotification: 'Touchdown confirmed at Wind Basin Outpost. 5 regions await survey.',
+    recentNotification: 'Touchdown confirmed at Wind Basin Outpost. 3 regions await survey.',
     transactions: saved?.transactions || [],
   };
 
@@ -636,13 +580,13 @@ export const useMissionStore = create<MissionStoreState>((set, get) => {
           set({
             completedReports: newReports,
             surveys: updatedSurveys,
-            recentNotification: `🌟 REGION REPORT COMPLETE: ${regionId.toUpperCase()}! (${newReports.length}/5 regions completed).`,
+            recentNotification: `🌟 REGION REPORT COMPLETE: ${regionId.toUpperCase()}! (${newReports.length}/3 regions completed).`,
           });
 
-          if (newReports.length === 5) {
+          if (newReports.length === 3) {
             set({
               activeModal: 'finale',
-              recentNotification: `🚀 ALL 5 REGION REPORTS SUBMITTED! Base Arrival & Ares-1 Landing Review unlocked!`,
+              recentNotification: `🚀 ALL 3 REGION REPORTS SUBMITTED! Base Arrival & Ares-1 Landing Review unlocked!`,
             });
           }
 
@@ -841,7 +785,7 @@ export const useMissionStore = create<MissionStoreState>((set, get) => {
         isTransmittingProposal: false,
         activeModal: null,
         activeMinigameId: null,
-        recentNotification: 'Touchdown confirmed at Wind Basin Outpost. 5 regions await survey.',
+        recentNotification: 'Touchdown confirmed at Wind Basin Outpost. 3 regions await survey.',
         transactions: [],
       }));
     },

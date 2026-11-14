@@ -6,22 +6,6 @@ import { RegionId } from '../contract';
 
 const REGIONS = [
   {
-    id: 'impact' as RegionId,
-    name: 'Echo Crater',
-    coords: [-200, 0, -170] as [number, number, number],
-    color: '#FF5A1F',
-    landmark: 'Radar Dome',
-    focalPoints: [
-      { id: 'H1', title: 'Crater Rim & Ejecta', offset: [15, 0, 15] as [number, number, number] },
-      { id: 'H2', title: 'Orbital Impact Pair', offset: [-15, 0, -15] as [number, number, number] },
-      { id: 'H3', title: 'Meteorite vs Basalt', offset: [5, 0, -20] as [number, number, number] },
-    ],
-    branches: [
-      { id: 'H_opt1', title: 'Rim Panorama Post', perkId: 'perk_impact_pins', offset: [30, 0, 10] as [number, number, number] },
-      { id: 'H_opt2', title: 'Sample Staging', perkId: 'perk_impact_tags', offset: [-25, 0, 5] as [number, number, number] },
-    ]
-  },
-  {
     id: 'dust' as RegionId,
     name: 'Wind Basin',
     coords: [0, 0, 0] as [number, number, number],
@@ -35,22 +19,6 @@ const REGIONS = [
     branches: [
       { id: 'D_opt1', title: 'Dune Crest Post', perkId: 'perk_dust_arrows', offset: [-25, 0, -20] as [number, number, number] },
       { id: 'D_opt2', title: 'Space Weather Lab', perkId: 'perk_dust_preview', offset: [28, 0, -22] as [number, number, number] },
-    ]
-  },
-  {
-    id: 'volcano' as RegionId,
-    name: 'Black Rock Terrace',
-    coords: [-210, 0, 180] as [number, number, number],
-    color: '#E63946',
-    landmark: 'Lava Bridge',
-    focalPoints: [
-      { id: 'V1', title: 'Flow Superposition Margin', offset: [15, 0, -15] as [number, number, number] },
-      { id: 'V2', title: 'Collapsed Lava Tube', offset: [-15, 0, 15] as [number, number, number] },
-      { id: 'V3', title: 'Vesicular Basalt vs Ash', offset: [5, 0, 0] as [number, number, number] },
-    ],
-    branches: [
-      { id: 'V_opt1', title: 'Sinuous Channel Overlook', perkId: 'perk_volcano_edge', offset: [-30, 0, -5] as [number, number, number] },
-      { id: 'V_opt2', title: 'Lava Tube Habitat Study', perkId: 'perk_volcano_cut', offset: [20, 0, 25] as [number, number, number] },
     ]
   },
   {
@@ -183,52 +151,48 @@ export const FiveFrontiersWorld: React.FC = () => {
       {REGIONS.map((reg) => {
         const isCurrent = currentRegion === reg.id;
         const survey = surveys[reg.id];
-        const base = bases[reg.id];
 
         return (
           <group key={reg.id} position={reg.coords}>
-            {/* Outpost Habitat Module */}
-            <group position={[0, 0, 0]}>
-              {/* Central Dome Shell */}
-              <mesh position={[0, 1.8, 0]} castShadow receiveShadow>
-                <sphereGeometry args={[4.5, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
-                <meshStandardMaterial color="#E2DCD2" roughness={0.6} metalness={0.1} />
-              </mesh>
-
-              {/* Airlock Vestibule */}
-              <mesh position={[0, 0.9, 4.8]} castShadow>
-                <boxGeometry args={[2.2, 1.8, 1.8]} />
-                <meshStandardMaterial color="#1C2026" roughness={0.4} />
-              </mesh>
-
-              {/* Base Identification Terminal Beacon */}
-              <mesh position={[0, 0.6, 6.2]}>
-                <cylinderGeometry args={[0.2, 0.2, 1.2, 12]} />
-                <meshStandardMaterial color="#1C2026" />
-              </mesh>
-              <mesh position={[0, 1.3, 6.2]}>
-                <sphereGeometry args={[0.22, 12, 12]} />
-                <meshBasicMaterial color={base?.isDiscovered ? reg.color : '#888888'} />
-              </mesh>
-              <pointLight position={[0, 2, 6.2]} color={reg.color} intensity={0.5} distance={10} />
-              {isCurrent && <pointLight position={[0, 6, 0]} color="#00D2FF" intensity={0.8} distance={15} />}
-            </group>
-
-            {/* Region Landmark Silhouette */}
-            {reg.id === 'impact' && (
-              /* Broken Radar Dome on Crater Rim */
-              <group position={[25, 0, 25]}>
-                <mesh rotation={[0.3, 0.4, 0.2]} position={[0, 3.5, 0]}>
-                  <sphereGeometry args={[5, 12, 8, 0, Math.PI * 1.4, 0, Math.PI * 0.6]} />
-                  <meshStandardMaterial color="#A0AEC0" wireframe />
+            {/* Outpost Habitat Module (Rendered for outer bases; dust at [0,0,0] uses main HabitatDome) */}
+            {reg.id !== 'dust' && (
+              <group position={[0, 0, 0]}>
+                {/* Modern Glowing Outpost Dome Shell */}
+                <mesh position={[0, 1.8, 0]} castShadow receiveShadow>
+                  <sphereGeometry args={[4.2, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+                  <meshStandardMaterial color="#334155" roughness={0.3} metalness={0.7} />
                 </mesh>
-                <mesh position={[0, 1.5, 0]}>
-                  <cylinderGeometry args={[0.4, 0.6, 3, 8]} />
-                  <meshStandardMaterial color="#4A5568" />
+                {/* Bioluminescent Aerogel Ring */}
+                <mesh position={[0, 1.8, 0]}>
+                  <sphereGeometry args={[4.25, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+                  <meshBasicMaterial color={reg.color} transparent opacity={0.25} wireframe />
                 </mesh>
+
+                {/* Airlock Vestibule with Glowing Frame */}
+                <mesh position={[0, 0.9, 4.2]} castShadow>
+                  <boxGeometry args={[2.2, 1.8, 1.8]} />
+                  <meshStandardMaterial color="#0F172A" roughness={0.3} metalness={0.8} />
+                </mesh>
+                <mesh position={[0, 0.9, 5.11]}>
+                  <boxGeometry args={[1.6, 1.6, 0.05]} />
+                  <meshStandardMaterial color={reg.color} emissive={reg.color} emissiveIntensity={0.8} />
+                </mesh>
+
+                {/* Base Identification Terminal Beacon */}
+                <mesh position={[0, 0.6, 5.8]}>
+                  <cylinderGeometry args={[0.15, 0.2, 1.2, 12]} />
+                  <meshStandardMaterial color="#1E293B" metalness={0.8} />
+                </mesh>
+                <mesh position={[0, 1.3, 5.8]}>
+                  <sphereGeometry args={[0.22, 12, 12]} />
+                  <meshStandardMaterial color={reg.color} emissive={reg.color} emissiveIntensity={1.2} />
+                </mesh>
+                <pointLight position={[0, 2, 5.8]} color={reg.color} intensity={1.2} distance={12} />
+                {isCurrent && <pointLight position={[0, 6, 0]} color="#00D2FF" intensity={1.5} distance={20} />}
               </group>
             )}
 
+            {/* Region Landmark Silhouette */}
             {reg.id === 'dust' && (
               /* Wind Anemometer Tower */
               <group position={[20, 0, -20]}>
@@ -240,24 +204,6 @@ export const FiveFrontiersWorld: React.FC = () => {
                 <mesh position={[0, 12.2, 0]}>
                   <sphereGeometry args={[0.6, 8, 8]} />
                   <meshStandardMaterial color="#FFB800" />
-                </mesh>
-              </group>
-            )}
-
-            {reg.id === 'volcano' && (
-              /* Lava Channel Survey Truss Bridge */
-              <group position={[0, 0, 22]}>
-                <mesh position={[0, 1.2, 0]}>
-                  <boxGeometry args={[14, 0.4, 3]} />
-                  <meshStandardMaterial color="#2D3748" roughness={0.8} />
-                </mesh>
-                <mesh position={[-6, 2, 0]}>
-                  <boxGeometry args={[0.4, 2, 3]} />
-                  <meshStandardMaterial color="#E63946" />
-                </mesh>
-                <mesh position={[6, 2, 0]}>
-                  <boxGeometry args={[0.4, 2, 3]} />
-                  <meshStandardMaterial color="#E63946" />
                 </mesh>
               </group>
             )}

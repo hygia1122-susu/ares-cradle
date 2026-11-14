@@ -21,9 +21,9 @@ interface FinaleReviewModalProps {
 const RESEARCH_GOALS: { id: ResearchGoalId; title: string; bases: RegionId[]; desc: string }[] = [
   {
     id: 'geology',
-    title: 'Geological History & Planetary Crust',
-    bases: ['impact', 'volcano'],
-    desc: 'Investigate impact dynamics and basaltic flow stratigraphy to unravel Mars crustal evolution.'
+    title: 'Martian Surface Dynamics & Regolith Science',
+    bases: ['dust', 'lake'],
+    desc: 'Investigate atmospheric dust circulation and lacustrine sediment layers to understand Mars surface evolution.'
   },
   {
     id: 'water_ops',
@@ -200,11 +200,11 @@ export const FinaleReviewModal: React.FC<FinaleReviewModalProps> = ({ onClose })
             </div>
           )}
 
-          {/* TAB 2: Evaluate 5 Bases */}
+          {/* TAB 2: Evaluate 3 Bases */}
           {activeTab === 'bases' && (
             <div className="space-y-4">
               <div>
-                <h3 className="text-base font-bold text-[#F4F1EA]">Evaluate 5 Outposts Against GO Criteria</h3>
+                <h3 className="text-base font-bold text-[#F4F1EA]">Evaluate 3 Outposts Against GO Criteria</h3>
                 <p className="text-xs text-[#F4F1EA]/70">
                   Target threshold for 3 crew members (Leo + Ares-1): ≥8 EU, ≥3 Meals, ≥3 Clean Water, ≥3 Air Packs, and all 3 visual safety checks.
                 </p>

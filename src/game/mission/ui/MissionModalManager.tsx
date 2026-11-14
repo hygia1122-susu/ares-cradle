@@ -6,9 +6,7 @@ import { FieldNotebookModal } from './FieldNotebookModal';
 import { EngineeringJobModal } from './EngineeringJobModal';
 import { RecoveryModal } from './RecoveryModal';
 import { FinaleReviewModal } from './FinaleReviewModal';
-import { ImpactSeismology } from '../activities/ImpactSeismology';
 import { DustGridModel } from '../activities/DustGridModel';
-import { VolcanoStratigraphy } from '../activities/VolcanoStratigraphy';
 import { IceDrillCore } from '../activities/IceDrillCore';
 import { LakeContextSurvey } from '../activities/LakeContextSurvey';
 import { X } from 'lucide-react';
@@ -56,9 +54,7 @@ export const MissionModalManager: React.FC = () => {
             <X className="w-5 h-5" />
           </button>
 
-          {currentRegion === 'impact' && <ImpactSeismology />}
           {currentRegion === 'dust' && <DustGridModel />}
-          {currentRegion === 'volcano' && <VolcanoStratigraphy />}
           {currentRegion === 'ice' && <IceDrillCore />}
           {currentRegion === 'lake' && <LakeContextSurvey />}
         </div>

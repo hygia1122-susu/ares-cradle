@@ -3,7 +3,7 @@
  * Definitive specifications conforming to MASTER_PLAN.md & Invariants I01 - I09.
  */
 
-export type RegionId = 'impact' | 'dust' | 'volcano' | 'ice' | 'lake';
+export type RegionId = 'dust' | 'ice' | 'lake';
 
 export type ResearchGoalId = 'geology' | 'water_ops' | 'ancient_life';
 

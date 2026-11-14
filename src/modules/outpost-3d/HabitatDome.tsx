@@ -22,6 +22,8 @@ export const HabitatDome: React.FC = () => {
   const shuttersRef = useRef<THREE.Group[]>([]);
   const pointLightRef = useRef<THREE.PointLight>(null);
   const dockPadRef = useRef<THREE.Mesh>(null);
+  const leftDoorRef = useRef<THREE.Mesh>(null);
+  const rightDoorRef = useRef<THREE.Mesh>(null);
   const hadDockedAlert = useRef(false);
 
   const emergencySaver = useOutpostStore((state) => state.emergencyPowerSaver);
@@ -29,6 +31,7 @@ export const HabitatDome: React.FC = () => {
   const temperature = useOutpostStore((state) => state.temperature);
   const isStormShutterClosed = useOutpostStore((state) => state.isStormShutterClosed);
   const roverPos = useOutpostStore((state) => state.roverPos);
+  const playerPos = useOutpostStore((state) => state.playerPos);
   const isRoverDocked = useOutpostStore((state) => state.isRoverDocked);
   const setIsRoverDocked = useOutpostStore((state) => state.setIsRoverDocked);
   const domeEvolutionLevel = useOutpostStore((state) => state.domeEvolutionLevel);
@@ -82,6 +85,17 @@ export const HabitatDome: React.FC = () => {
       }
     }
 
+    // 3b. Automated Sliding Airlock Doors for Cadet Leo
+    const distToAirlock = Math.hypot(playerPos[0] - 0, playerPos[2] - 4.5);
+    const doorOpen = distToAirlock < 3.6;
+    const targetDoorOffset = doorOpen ? 0.95 : 0.45;
+    if (leftDoorRef.current) {
+      leftDoorRef.current.position.x = THREE.MathUtils.lerp(leftDoorRef.current.position.x, -targetDoorOffset, safeDelta * 6);
+    }
+    if (rightDoorRef.current) {
+      rightDoorRef.current.position.x = THREE.MathUtils.lerp(rightDoorRef.current.position.x, targetDoorOffset, safeDelta * 6);
+    }
+
     // 4. Storm Shutter Servo Actuation
     const targetAngle = isStormShutterClosed ? 0.92 : 0.0;
     shutterAngle.current = THREE.MathUtils.lerp(shutterAngle.current, targetAngle, safeDelta * 2.8);
@@ -125,24 +139,79 @@ export const HabitatDome: React.FC = () => {
   return (
     <group position={[0, 0, 0]}>
       {/* ========================================================
-          1. 3D-PRINTED BIO-REGOLITH FOUNDATION WALLS (3.85m Radius)
+          1. 3D-PRINTED SINTERED FOUNDATION WALLS & INTERIOR FLOOR
           ======================================================== */}
-      {/* Heavy Regolith Extrusion Ring */}
+      {/* Heavy Sintered Composite Foundation Ring */}
       <mesh position={[0, 0.24, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[3.95, 4.12, 0.55, 32]} />
+        <cylinderGeometry args={[3.92, 4.10, 0.55, 32]} />
         <meshStandardMaterial
-          color="#9A3412"
-          roughness={0.9}
-          metalness={0.15}
-          flatShading
+          color="#1E293B"
+          roughness={0.7}
+          metalness={0.4}
         />
       </mesh>
 
-      {/* Structural Compression Collar Ring with Hazard Striping */}
-      <mesh position={[0, 0.54, 0]} castShadow>
-        <cylinderGeometry args={[3.88, 3.98, 0.14, 32]} />
-        <meshStandardMaterial color="#1E293B" metalness={0.85} roughness={0.25} />
+      {/* Perimeter Cyan Glowing Accent Strip */}
+      <mesh position={[0, 0.48, 0]}>
+        <cylinderGeometry args={[3.94, 3.94, 0.06, 32]} />
+        <meshStandardMaterial color="#00D2FF" emissive="#00D2FF" emissiveIntensity={0.8} />
       </mesh>
+
+      {/* Solid Pressurized Interior Floor Deck (Cadet Leo walks on this at y=0.2) */}
+      <mesh position={[0, 0.18, 0]} receiveShadow>
+        <cylinderGeometry args={[3.80, 3.80, 0.08, 32]} />
+        <meshStandardMaterial color="#0F172A" roughness={0.3} metalness={0.8} />
+      </mesh>
+
+      {/* Interior Deck Guidance Rings */}
+      <mesh position={[0, 0.23, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[1.6, 1.65, 32]} />
+        <meshBasicMaterial color="#00D2FF" transparent opacity={0.6} />
+      </mesh>
+      <mesh position={[0, 0.23, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[2.8, 2.85, 32]} />
+        <meshBasicMaterial color="#00D2FF" transparent opacity={0.3} />
+      </mesh>
+
+      {/* Walk-in Entrance Ramp (From dirt y=-0.4 to interior floor y=0.2) */}
+      <group position={[0, -0.1, 4.6]}>
+        <mesh rotation={[0.26, 0, 0]} receiveShadow>
+          <boxGeometry args={[1.8, 0.12, 2.2]} />
+          <meshStandardMaterial color="#1E293B" roughness={0.6} metalness={0.5} />
+        </mesh>
+        {/* Safety Edge LED Strips */}
+        {[-0.92, 0.92].map((rx, rIdx) => (
+          <mesh key={`ramp-led-${rIdx}`} position={[rx, 0.08, 0]} rotation={[0.26, 0, 0]}>
+            <boxGeometry args={[0.08, 0.05, 2.2]} />
+            <meshStandardMaterial color="#00D2FF" emissive="#00D2FF" emissiveIntensity={1.2} />
+          </mesh>
+        ))}
+      </group>
+
+      {/* Automated Sliding Airlock Doors */}
+      <group position={[0, 0.2, 3.75]}>
+        {/* Glowing Airlock Portal Arch Frame */}
+        <mesh position={[0, 0.9, 0]}>
+          <boxGeometry args={[2.2, 2.0, 0.15]} />
+          <meshStandardMaterial color="#0F172A" roughness={0.4} metalness={0.8} />
+        </mesh>
+        <mesh position={[0, 0.9, 0.08]}>
+          <boxGeometry args={[1.8, 1.8, 0.02]} />
+          <meshStandardMaterial color="#00D2FF" emissive="#00D2FF" emissiveIntensity={0.6} />
+        </mesh>
+
+        {/* Left Sliding Door */}
+        <mesh ref={leftDoorRef} position={[-0.45, 0.9, 0.04]} castShadow>
+          <boxGeometry args={[0.85, 1.7, 0.08]} />
+          <meshStandardMaterial color="#334155" metalness={0.85} roughness={0.2} />
+        </mesh>
+
+        {/* Right Sliding Door */}
+        <mesh ref={rightDoorRef} position={[0.45, 0.9, 0.04]} castShadow>
+          <boxGeometry args={[0.85, 1.7, 0.08]} />
+          <meshStandardMaterial color="#334155" metalness={0.85} roughness={0.2} />
+        </mesh>
+      </group>
 
       {/* ========================================================
           2. SPACIOUS AEROGEL GEODESIC DOME & CORONA GLOW

@@ -82,6 +82,20 @@ export const HabitatInterior: React.FC = () => {
           <meshStandardMaterial color="#0F172A" roughness={0.3} metalness={0.8} />
         </mesh>
 
+        {/* 3 Angled Mission Telemetry Holographic Displays */}
+        {[0, (2 * Math.PI) / 3, (4 * Math.PI) / 3].map((angle, idx) => (
+          <group key={`terminal-screen-${idx}`} rotation={[0, angle, 0]} position={[0, 0.36, 0]}>
+            <mesh position={[0, 0.14, 0.82]} rotation={[-0.45, 0, 0]}>
+              <boxGeometry args={[0.46, 0.26, 0.02]} />
+              <meshStandardMaterial color="#00D2FF" emissive="#00D2FF" emissiveIntensity={1.2} roughness={0.1} />
+            </mesh>
+            <mesh position={[0, 0.14, 0.81]} rotation={[-0.45, 0, 0]}>
+              <boxGeometry args={[0.50, 0.30, 0.02]} />
+              <meshStandardMaterial color="#0F172A" metalness={0.9} roughness={0.2} />
+            </mesh>
+          </group>
+        ))}
+
         {/* Holo Projector Ring */}
         <mesh position={[0, 0.36, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[0.65, 0.88, 24]} />

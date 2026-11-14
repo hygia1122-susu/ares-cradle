@@ -128,6 +128,49 @@ export const AstronautPlayer: React.FC = () => {
       newX = Math.max(-295, Math.min(295, newX));
       newZ = Math.max(-295, Math.min(295, newZ));
 
+      // Physical Base Collisions & Walk-in Entrance Ramp
+      const BASES = [
+        { x: 0, z: 0 },
+        { x: 210, z: -180 },
+        { x: 200, z: 170 },
+      ];
+
+      let targetFloor = -0.4;
+
+      for (const b of BASES) {
+        const dx = newX - b.x;
+        const dz = newZ - b.z;
+        const dist = Math.hypot(dx, dz);
+
+        // Door corridor in front of base (+Z)
+        const inCorridor = Math.abs(dx) <= 1.2 && dz >= 3.2 && dz <= 5.8;
+
+        if (dist < 3.8) {
+          if (inCorridor) {
+            targetFloor = 0.2;
+          } else {
+            const oldDx = groupRef.current.position.x - b.x;
+            const oldDz = groupRef.current.position.z - b.z;
+            const wasInside = Math.hypot(oldDx, oldDz) < 3.7;
+
+            if (wasInside) {
+              const angle = Math.atan2(dx, dz);
+              newX = b.x + Math.sin(angle) * 3.6;
+              newZ = b.z + Math.cos(angle) * 3.6;
+              targetFloor = 0.2;
+            } else {
+              const angle = Math.atan2(dx, dz);
+              newX = b.x + Math.sin(angle) * 3.85;
+              newZ = b.z + Math.cos(angle) * 3.85;
+              targetFloor = -0.4;
+            }
+          }
+        } else if (inCorridor) {
+          const rampProgress = Math.max(0, Math.min(1, (5.8 - dz) / (5.8 - 3.4)));
+          targetFloor = -0.4 + rampProgress * 0.6;
+        }
+      }
+
       groupRef.current.position.x = newX;
       groupRef.current.position.z = newZ;
 
@@ -150,17 +193,38 @@ export const AstronautPlayer: React.FC = () => {
       if (leftArmRef.current && rightArmRef.current) {
         leftArmRef.current.rotation.x = -swing * 0.4;
         if (isFlashlightOn) {
-          // Tactical Forward Hold: stable forward pointing with subtle walk bobbing
           rightArmRef.current.rotation.x = -0.35 + Math.sin(walkCycle.current) * 0.05;
         } else {
           rightArmRef.current.rotation.x = swing * 0.4;
         }
       }
-      // Bobbing head & body bounce
-      groupRef.current.position.y = -0.4 + Math.abs(Math.sin(walkCycle.current)) * 0.06;
+      // Bobbing head & body bounce relative to current floor height
+      groupRef.current.position.y = targetFloor + Math.abs(Math.sin(walkCycle.current)) * 0.06;
     } else {
-      // Idle pose reset
-      groupRef.current.position.y = -0.4 + Math.sin(walkCycle.current) * 0.02;
+      // Re-evaluate target floor in idle pose
+      const BASES = [
+        { x: 0, z: 0 },
+        { x: 210, z: -180 },
+        { x: 200, z: 170 },
+      ];
+      let targetFloor = -0.4;
+
+      for (const b of BASES) {
+        const dx = groupRef.current.position.x - b.x;
+        const dz = groupRef.current.position.z - b.z;
+        const dist = Math.hypot(dx, dz);
+        const inCorridor = Math.abs(dx) <= 1.2 && dz >= 3.2 && dz <= 5.8;
+
+        if (dist < 3.8) {
+          targetFloor = 0.2;
+        } else if (inCorridor) {
+          const rampProgress = Math.max(0, Math.min(1, (5.8 - dz) / (5.8 - 3.4)));
+          targetFloor = -0.4 + rampProgress * 0.6;
+        }
+      }
+
+      // Idle pose reset relative to current floor height
+      groupRef.current.position.y = targetFloor + Math.sin(walkCycle.current) * 0.02;
       if (leftLegRef.current && rightLegRef.current) {
         leftLegRef.current.rotation.x *= 0.85;
         rightLegRef.current.rotation.x *= 0.85;
@@ -168,7 +232,6 @@ export const AstronautPlayer: React.FC = () => {
       if (leftArmRef.current && rightArmRef.current) {
         leftArmRef.current.rotation.x *= 0.85;
         if (isFlashlightOn) {
-          // Tactical Forward Hold in idle pose
           rightArmRef.current.rotation.x = -0.35;
         } else {
           rightArmRef.current.rotation.x *= 0.85;
@@ -183,13 +246,10 @@ export const AstronautPlayer: React.FC = () => {
       groupRef.current.position.z
     ]);
 
-    // Airlock Proximity Check (Airlock door at [2.2, 0.35, 0], Dome radius ~ 2.2m)
+    // Update inside habitat state
     const px = groupRef.current.position.x;
     const pz = groupRef.current.position.z;
-    const rad = Math.sqrt(px * px + pz * pz);
-
-    // If inside dome radius or near airlock entry
-    const isInside = rad < 1.95;
+    const isInside = Math.hypot(px, pz) < 3.7 || Math.hypot(px - 210, pz + 180) < 3.7 || Math.hypot(px - 200, pz - 170) < 3.7;
     if (isInside !== isInsideHabitat) {
       setIsInsideHabitat(isInside);
     }
