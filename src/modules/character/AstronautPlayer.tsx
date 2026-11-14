@@ -142,32 +142,32 @@ export const AstronautPlayer: React.FC = () => {
         const dz = newZ - b.z;
         const dist = Math.hypot(dx, dz);
 
-        // Door corridor in front of base (+Z)
-        const inCorridor = Math.abs(dx) <= 1.2 && dz >= 3.2 && dz <= 5.8;
+        // Door corridor directly in front of base (+Z entrance)
+        const inCorridor = Math.abs(dx) <= 1.15 && dz >= 3.5 && dz <= 6.5;
 
-        if (dist < 3.8) {
-          if (inCorridor) {
-            targetFloor = 0.2;
-          } else {
-            const oldDx = groupRef.current.position.x - b.x;
-            const oldDz = groupRef.current.position.z - b.z;
-            const wasInside = Math.hypot(oldDx, oldDz) < 3.7;
+        if (dist < 3.6) {
+          // Inside habitat base dome: Cadet Leo stands securely on deck at y=0.52
+          targetFloor = 0.52;
 
-            if (wasInside) {
-              const angle = Math.atan2(dx, dz);
-              newX = b.x + Math.sin(angle) * 3.6;
-              newZ = b.z + Math.cos(angle) * 3.6;
-              targetFloor = 0.2;
-            } else {
-              const angle = Math.atan2(dx, dz);
-              newX = b.x + Math.sin(angle) * 3.85;
-              newZ = b.z + Math.cos(angle) * 3.85;
-              targetFloor = -0.4;
-            }
+          // Wall collision: cannot walk through curved dome wall except through the front doorway
+          if (dist > 3.52 && !(Math.abs(dx) <= 1.10 && dz >= 3.2)) {
+            const angle = Math.atan2(dx, dz);
+            newX = b.x + Math.sin(angle) * 3.52;
+            newZ = b.z + Math.cos(angle) * 3.52;
           }
         } else if (inCorridor) {
-          const rampProgress = Math.max(0, Math.min(1, (5.8 - dz) / (5.8 - 3.4)));
-          targetFloor = -0.4 + rampProgress * 0.6;
+          // Walking on entrance ramp: smooth elevation from ground (-0.4) to deck (+0.52)
+          const rampProgress = Math.max(0, Math.min(1, (6.4 - dz) / (6.4 - 3.6)));
+          targetFloor = -0.4 + rampProgress * 0.92;
+        } else {
+          // Outside on Martian terrain
+          // Wall collision: cannot penetrate or clip into base from outside
+          if (dist < 3.88) {
+            const angle = Math.atan2(dx, dz);
+            newX = b.x + Math.sin(angle) * 3.88;
+            newZ = b.z + Math.cos(angle) * 3.88;
+            targetFloor = -0.4;
+          }
         }
       }
 
@@ -213,13 +213,13 @@ export const AstronautPlayer: React.FC = () => {
         const dx = groupRef.current.position.x - b.x;
         const dz = groupRef.current.position.z - b.z;
         const dist = Math.hypot(dx, dz);
-        const inCorridor = Math.abs(dx) <= 1.2 && dz >= 3.2 && dz <= 5.8;
+        const inCorridor = Math.abs(dx) <= 1.15 && dz >= 3.5 && dz <= 6.5;
 
-        if (dist < 3.8) {
-          targetFloor = 0.2;
+        if (dist < 3.6) {
+          targetFloor = 0.52;
         } else if (inCorridor) {
-          const rampProgress = Math.max(0, Math.min(1, (5.8 - dz) / (5.8 - 3.4)));
-          targetFloor = -0.4 + rampProgress * 0.6;
+          const rampProgress = Math.max(0, Math.min(1, (6.4 - dz) / (6.4 - 3.6)));
+          targetFloor = -0.4 + rampProgress * 0.92;
         }
       }
 
@@ -249,14 +249,14 @@ export const AstronautPlayer: React.FC = () => {
     // Update inside habitat state
     const px = groupRef.current.position.x;
     const pz = groupRef.current.position.z;
-    const isInside = Math.hypot(px, pz) < 3.7 || Math.hypot(px - 210, pz + 180) < 3.7 || Math.hypot(px - 200, pz - 170) < 3.7;
+    const isInside = Math.hypot(px, pz) < 3.6 || Math.hypot(px - 210, pz + 180) < 3.6 || Math.hypot(px - 200, pz - 170) < 3.6;
     if (isInside !== isInsideHabitat) {
       setIsInsideHabitat(isInside);
     }
   });
 
   return (
-    <group ref={groupRef} position={[1.8, -0.4, 2.5]} dispose={null}>
+    <group ref={groupRef} position={[0, -0.4, 8.5]} dispose={null}>
       {/* Head & Helmet */}
       <group ref={headRef} position={[0, 0.95, 0]}>
         {/* White Spacesuit Helmet Box */}

@@ -36,9 +36,9 @@ export const HabitatDome: React.FC = () => {
   const setIsRoverDocked = useOutpostStore((state) => state.setIsRoverDocked);
   const domeEvolutionLevel = useOutpostStore((state) => state.domeEvolutionLevel);
 
-  // Ramp Dock Position on Mars terrain (in front of base at +Z)
-  const dockTargetX = 0;
-  const dockTargetZ = 5.2;
+  // Dedicated Rover Charging Bay on Mars terrain (offset to east side of ramp)
+  const dockTargetX = 3.6;
+  const dockTargetZ = 4.8;
 
   useFrame((state, delta) => {
     const elapsed = state.clock.getElapsedTime();
@@ -87,8 +87,8 @@ export const HabitatDome: React.FC = () => {
 
     // 3b. Automated Sliding Airlock Doors for Cadet Leo
     const distToAirlock = Math.hypot(playerPos[0] - 0, playerPos[2] - 4.5);
-    const doorOpen = distToAirlock < 3.6;
-    const targetDoorOffset = doorOpen ? 0.95 : 0.45;
+    const doorOpen = distToAirlock < 3.8;
+    const targetDoorOffset = doorOpen ? 1.25 : 0.45;
     if (leftDoorRef.current) {
       leftDoorRef.current.position.x = THREE.MathUtils.lerp(leftDoorRef.current.position.x, -targetDoorOffset, safeDelta * 6);
     }
@@ -157,58 +157,132 @@ export const HabitatDome: React.FC = () => {
         <meshStandardMaterial color="#00D2FF" emissive="#00D2FF" emissiveIntensity={0.8} />
       </mesh>
 
-      {/* Solid Pressurized Interior Floor Deck (Cadet Leo walks on this at y=0.2) */}
-      <mesh position={[0, 0.18, 0]} receiveShadow>
-        <cylinderGeometry args={[3.80, 3.80, 0.08, 32]} />
+      {/* Solid Pressurized Interior Floor Deck (Cadet Leo stands on this at y=0.52) */}
+      <mesh position={[0, 0.50, 0]} receiveShadow>
+        <cylinderGeometry args={[3.80, 3.80, 0.04, 32]} />
         <meshStandardMaterial color="#0F172A" roughness={0.3} metalness={0.8} />
       </mesh>
 
-      {/* Interior Deck Guidance Rings */}
-      <mesh position={[0, 0.23, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      {/* Interior Deck Guidance Rings at y=0.522 */}
+      <mesh position={[0, 0.522, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[1.6, 1.65, 32]} />
         <meshBasicMaterial color="#00D2FF" transparent opacity={0.6} />
       </mesh>
-      <mesh position={[0, 0.23, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[0, 0.522, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[2.8, 2.85, 32]} />
         <meshBasicMaterial color="#00D2FF" transparent opacity={0.3} />
       </mesh>
 
-      {/* Walk-in Entrance Ramp (From dirt y=-0.4 to interior floor y=0.2) */}
-      <group position={[0, -0.1, 4.6]}>
-        <mesh rotation={[0.26, 0, 0]} receiveShadow>
-          <boxGeometry args={[1.8, 0.12, 2.2]} />
+      {/* ========================================================
+          WALK-IN ENTRANCE RAMP (From dirt y=-0.4, z=6.4 to base deck y=0.52, z=3.6)
+          Slope angle: atan2(0.92, 2.8) = 0.3172 rad (~18.2°)
+          ======================================================== */}
+      <group position={[0, 0.06, 5.0]}>
+        {/* Heavy Textured Ramp Surface */}
+        <mesh rotation={[0.3172, 0, 0]} receiveShadow>
+          <boxGeometry args={[2.2, 0.12, 2.95]} />
           <meshStandardMaterial color="#1E293B" roughness={0.6} metalness={0.5} />
         </mesh>
-        {/* Safety Edge LED Strips */}
-        {[-0.92, 0.92].map((rx, rIdx) => (
-          <mesh key={`ramp-led-${rIdx}`} position={[rx, 0.08, 0]} rotation={[0.26, 0, 0]}>
-            <boxGeometry args={[0.08, 0.05, 2.2]} />
-            <meshStandardMaterial color="#00D2FF" emissive="#00D2FF" emissiveIntensity={1.2} />
+
+        {/* Transverse Non-Slip Traction Treads */}
+        {[-1.0, -0.5, 0.0, 0.5, 1.0].map((tZ, idx) => (
+          <mesh key={`ramp-tread-${idx}`} position={[0, 0.07, tZ]} rotation={[0.3172, 0, 0]}>
+            <boxGeometry args={[2.0, 0.02, 0.12]} />
+            <meshStandardMaterial color="#334155" roughness={0.9} />
           </mesh>
         ))}
+
+        {/* Safety Guide Rails with Glowing Cyan LED strips & Handrails */}
+        {[-1.14, 1.14].map((rx, rIdx) => (
+          <group key={`ramp-rail-${rIdx}`} position={[rx, 0, 0]}>
+            {/* Base glowing strip */}
+            <mesh position={[0, 0.07, 0]} rotation={[0.3172, 0, 0]}>
+              <boxGeometry args={[0.08, 0.04, 2.95]} />
+              <meshStandardMaterial color="#00D2FF" emissive="#00D2FF" emissiveIntensity={1.2} />
+            </mesh>
+            {/* Handrail Vertical Support Posts */}
+            {[-1.1, 0, 1.1].map((pz, pIdx) => (
+              <mesh key={`post-${pIdx}`} position={[0, 0.35 + pz * Math.sin(0.3172), pz * Math.cos(0.3172)]}>
+                <cylinderGeometry args={[0.025, 0.025, 0.6, 8]} />
+                <meshStandardMaterial color="#64748B" metalness={0.9} />
+              </mesh>
+            ))}
+            {/* Top Tubular Handrail */}
+            <mesh position={[0, 0.42, 0]} rotation={[0.3172, 0, 0]}>
+              <boxGeometry args={[0.05, 0.05, 2.95]} />
+              <meshStandardMaterial color="#94A3B8" metalness={0.8} />
+            </mesh>
+          </group>
+        ))}
+
+        {/* Ground Transition Threshold Pad at Martian Dirt */}
+        <mesh position={[0, -0.42, 1.55]} receiveShadow>
+          <boxGeometry args={[2.5, 0.05, 0.5]} />
+          <meshStandardMaterial color="#C1440E" roughness={0.8} />
+        </mesh>
+        {/* Amber Hazard Line at Entrance */}
+        <mesh position={[0, -0.39, 1.7]}>
+          <boxGeometry args={[2.4, 0.01, 0.08]} />
+          <meshStandardMaterial color="#F59E0B" emissive="#F59E0B" emissiveIntensity={1.0} />
+        </mesh>
       </group>
 
-      {/* Automated Sliding Airlock Doors */}
-      <group position={[0, 0.2, 3.75]}>
-        {/* Glowing Airlock Portal Arch Frame */}
-        <mesh position={[0, 0.9, 0]}>
-          <boxGeometry args={[2.2, 2.0, 0.15]} />
+      {/* ========================================================
+          PRESSURIZED AIRLOCK PORTAL & SLIDING DOORS (At z=3.75)
+          Clear Walkthrough Aperture: Width 1.8m, Height 2.2m
+          ======================================================== */}
+      <group position={[0, 0.52, 3.75]}>
+        {/* Left Arch Jamb Pillar */}
+        <mesh position={[-1.05, 1.1, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.3, 2.2, 0.4]} />
           <meshStandardMaterial color="#0F172A" roughness={0.4} metalness={0.8} />
         </mesh>
-        <mesh position={[0, 0.9, 0.08]}>
-          <boxGeometry args={[1.8, 1.8, 0.02]} />
-          <meshStandardMaterial color="#00D2FF" emissive="#00D2FF" emissiveIntensity={0.6} />
+        <mesh position={[-0.92, 1.1, 0.21]}>
+          <boxGeometry args={[0.04, 2.1, 0.02]} />
+          <meshStandardMaterial color="#00D2FF" emissive="#00D2FF" emissiveIntensity={0.9} />
         </mesh>
 
-        {/* Left Sliding Door */}
-        <mesh ref={leftDoorRef} position={[-0.45, 0.9, 0.04]} castShadow>
-          <boxGeometry args={[0.85, 1.7, 0.08]} />
+        {/* Right Arch Jamb Pillar */}
+        <mesh position={[1.05, 1.1, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.3, 2.2, 0.4]} />
+          <meshStandardMaterial color="#0F172A" roughness={0.4} metalness={0.8} />
+        </mesh>
+        <mesh position={[0.92, 1.1, 0.21]}>
+          <boxGeometry args={[0.04, 2.1, 0.02]} />
+          <meshStandardMaterial color="#00D2FF" emissive="#00D2FF" emissiveIntensity={0.9} />
+        </mesh>
+
+        {/* Top Header Lintel */}
+        <mesh position={[0, 2.25, 0]} castShadow>
+          <boxGeometry args={[2.4, 0.3, 0.4]} />
+          <meshStandardMaterial color="#0F172A" roughness={0.4} metalness={0.8} />
+        </mesh>
+        <mesh position={[0, 2.15, 0.21]}>
+          <boxGeometry args={[2.0, 0.04, 0.02]} />
+          <meshStandardMaterial color="#00D2FF" emissive="#00D2FF" emissiveIntensity={0.9} />
+        </mesh>
+
+        {/* Status Display Screen above Doorway */}
+        <mesh position={[0, 2.26, 0.22]}>
+          <boxGeometry args={[0.8, 0.16, 0.02]} />
+          <meshStandardMaterial color="#10B981" emissive="#10B981" emissiveIntensity={0.8} />
+        </mesh>
+
+        {/* Threshold Floor Plate */}
+        <mesh position={[0, 0.01, 0]}>
+          <boxGeometry args={[1.8, 0.02, 0.4]} />
+          <meshStandardMaterial color="#334155" roughness={0.3} metalness={0.8} />
+        </mesh>
+
+        {/* Left Sliding Door Panel */}
+        <mesh ref={leftDoorRef} position={[-0.45, 1.05, 0.02]} castShadow>
+          <boxGeometry args={[0.95, 2.05, 0.08]} />
           <meshStandardMaterial color="#334155" metalness={0.85} roughness={0.2} />
         </mesh>
 
-        {/* Right Sliding Door */}
-        <mesh ref={rightDoorRef} position={[0.45, 0.9, 0.04]} castShadow>
-          <boxGeometry args={[0.85, 1.7, 0.08]} />
+        {/* Right Sliding Door Panel */}
+        <mesh ref={rightDoorRef} position={[0.45, 1.05, 0.02]} castShadow>
+          <boxGeometry args={[0.95, 2.05, 0.08]} />
           <meshStandardMaterial color="#334155" metalness={0.85} roughness={0.2} />
         </mesh>
       </group>
@@ -255,8 +329,9 @@ export const HabitatDome: React.FC = () => {
 
       {/* ========================================================
           3. STORM SHUTTER SHIELD SYSTEM (4 Interlocking Petals)
+          Angled at 45°, 135°, 225°, 315° to keep +Z entrance open
           ======================================================== */}
-      {[0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2].map((baseRot, idx) => (
+      {[Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4].map((baseRot, idx) => (
         <group key={`shutter-pivot-${idx}`} rotation={[0, baseRot, 0]}>
           <group
             ref={(el) => {
@@ -287,19 +362,19 @@ export const HabitatDome: React.FC = () => {
       ))}
 
       {/* ========================================================
-          4. ROVER CHARGING RAMP WITH INDUCTION DOCK (Toward +Z)
+          4. ROVER CHARGING BAY & INDUCTION DOCK (Adjacent at x=3.6, z=4.8)
           ======================================================== */}
-      <group position={[dockTargetX, -0.15, dockTargetZ - 0.4]}>
+      <group position={[dockTargetX, -0.32, dockTargetZ]}>
         {/* Sloped Ramp Platform */}
-        <mesh position={[0, -0.05, 0]} rotation={[0.18, 0, 0]} receiveShadow>
-          <boxGeometry args={[2.2, 0.16, 2.8]} />
+        <mesh position={[0, 0.04, 0]} receiveShadow>
+          <boxGeometry args={[2.2, 0.12, 2.8]} />
           <meshStandardMaterial color="#1E293B" roughness={0.8} metalness={0.3} />
         </mesh>
 
         {/* Safety Guide Rails */}
         {[-1.12, 1.12].map((rx, rIdx) => (
-          <mesh key={`rail-${rIdx}`} position={[rx, 0.14, 0]} rotation={[0.18, 0, 0]}>
-            <boxGeometry args={[0.08, 0.22, 2.8]} />
+          <mesh key={`rail-${rIdx}`} position={[rx, 0.14, 0]}>
+            <boxGeometry args={[0.08, 0.18, 2.8]} />
             <meshStandardMaterial color="#475569" metalness={0.9} roughness={0.2} />
           </mesh>
         ))}
@@ -307,8 +382,8 @@ export const HabitatDome: React.FC = () => {
         {/* Magnetic Induction Charging Pad */}
         <mesh
           ref={dockPadRef}
-          position={[0, 0.18, -0.7]}
-          rotation={[-Math.PI / 2 + 0.18, 0, 0]}
+          position={[0, 0.11, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
         >
           <ringGeometry args={[0.4, 0.85, 20]} />
           <meshStandardMaterial
@@ -320,8 +395,8 @@ export const HabitatDome: React.FC = () => {
         </mesh>
 
         {/* Chevron Guide Strips */}
-        {[-0.4, 0, 0.4].map((cz, cIdx) => (
-          <mesh key={`chev-${cIdx}`} position={[0, 0.07, cz]} rotation={[-Math.PI / 2 + 0.18, 0, 0]}>
+        {[-0.6, 0, 0.6].map((cz, cIdx) => (
+          <mesh key={`chev-${cIdx}`} position={[0, 0.115, cz]} rotation={[-Math.PI / 2, 0, 0]}>
             <planeGeometry args={[0.8, 0.1]} />
             <meshBasicMaterial
               color={isRoverDocked ? '#10B981' : '#F59E0B'}
@@ -330,6 +405,20 @@ export const HabitatDome: React.FC = () => {
             />
           </mesh>
         ))}
+
+        {/* Charging Status Terminal Pole */}
+        <mesh position={[1.2, 0.6, -1.0]}>
+          <cylinderGeometry args={[0.04, 0.04, 1.2, 8]} />
+          <meshStandardMaterial color="#64748B" metalness={0.8} />
+        </mesh>
+        <mesh position={[1.2, 1.2, -1.0]}>
+          <boxGeometry args={[0.22, 0.28, 0.15]} />
+          <meshStandardMaterial
+            color={isRoverDocked ? '#10B981' : '#F59E0B'}
+            emissive={isRoverDocked ? '#10B981' : '#F59E0B'}
+            emissiveIntensity={0.8}
+          />
+        </mesh>
       </group>
 
       {/* ========================================================

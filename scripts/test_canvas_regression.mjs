@@ -125,8 +125,8 @@ async function runRegressionSuite() {
     const navDuration = Date.now() - navStart;
     console.log(`✅ Loaded in ${navDuration}ms (Target: < 1200ms)`);
 
-    // Wait for Canvas element to be mounted
-    await page.waitForSelector('canvas', { timeout: 10000 });
+    // Wait for Canvas element to be mounted (allow 30s for cold Vite dev transform)
+    await page.waitForSelector('canvas', { timeout: 30000 });
     console.log('✅ R3F WebGL Canvas element detected.');
 
     // Wait for 3D shaders and post-processing to settle

@@ -58,12 +58,12 @@ export const HabitatInterior: React.FC = () => {
         mistLifetimes.current[i] += safeDelta * 1.5;
         if (mistLifetimes.current[i] > 1.0) {
           mistLifetimes.current[i] = Math.random() * 0.2;
-          pos[i * 3] = 3.2 + (Math.random() - 0.5) * 0.4;
-          pos[i * 3 + 1] = 0.4 + Math.random() * 0.8;
-          pos[i * 3 + 2] = (Math.random() - 0.5) * 0.6;
+          pos[i * 3] = (Math.random() - 0.5) * 0.8;
+          pos[i * 3 + 1] = 0.55 + Math.random() * 1.2;
+          pos[i * 3 + 2] = 3.7 + (Math.random() - 0.5) * 0.4;
         } else {
-          pos[i * 3] -= safeDelta * 0.3; // drift inward
-          pos[i * 3 + 1] += safeDelta * 0.15; // rise
+          pos[i * 3 + 2] -= safeDelta * 0.3; // drift inward into dome
+          pos[i * 3 + 1] += safeDelta * 0.12; // rise gently
         }
       }
       geo.attributes.position.needsUpdate = true;
@@ -75,7 +75,7 @@ export const HabitatInterior: React.FC = () => {
       {/* ========================================================
           ZONE 1: CENTRAL COMMAND TABLE & 3D ROTATING MARS GLOBE
           ======================================================== */}
-      <group position={[0, 0.45, 0]}>
+      <group position={[0, 0.52, 0]}>
         {/* Hexagonal Command Console Base */}
         <mesh position={[0, 0.12, 0]} castShadow receiveShadow>
           <cylinderGeometry args={[0.95, 1.15, 0.45, 6]} />
@@ -143,7 +143,7 @@ export const HabitatInterior: React.FC = () => {
       {/* ========================================================
           ZONE 2: SABATIER OXYGEN ELECTROLYSIS SCRUBBER (West)
           ======================================================== */}
-      <group position={[-2.4, 0.45, 0]}>
+      <group position={[-2.4, 0.52, 0]}>
         {/* Heavy Machine Housing Base */}
         <mesh position={[0, 0.25, 0]} castShadow>
           <boxGeometry args={[1.2, 0.7, 0.9]} />
@@ -187,7 +187,7 @@ export const HabitatInterior: React.FC = () => {
       {/* ========================================================
           ZONE 3: MULTI-TIER VERTICAL HYDROPONIC FARM (North)
           ======================================================== */}
-      <group position={[0, 0.45, -2.4]}>
+      <group position={[0, 0.52, -2.4]}>
         {/* Hydroponic Rack Frame */}
         <mesh position={[0, 0.9, 0]} castShadow>
           <boxGeometry args={[2.4, 1.8, 0.5]} />
@@ -224,7 +224,7 @@ export const HabitatInterior: React.FC = () => {
       {/* ========================================================
           ZONE 4: CHEMICAL SPECIMEN ANALYZER WORKBENCH (South-West)
           ======================================================== */}
-      <group position={[-1.7, 0.45, 1.7]} rotation={[0, Math.PI / 4, 0]}>
+      <group position={[-1.7, 0.52, 1.7]} rotation={[0, Math.PI / 4, 0]}>
         {/* Lab Countertop Desk */}
         <mesh position={[0, 0.3, 0]} castShadow>
           <boxGeometry args={[1.5, 0.6, 0.7]} />
@@ -265,7 +265,7 @@ export const HabitatInterior: React.FC = () => {
       {/* ========================================================
           SPIRAL STAIRCASE & 2ND-STORY STARGAZING OBSERVATION DECK
           ======================================================== */}
-      <group position={[1.4, 0.45, -1.0]}>
+      <group position={[1.4, 0.52, -1.0]}>
         {/* Central Spiral Mast */}
         <mesh position={[0, 0.9, 0]}>
           <cylinderGeometry args={[0.08, 0.08, 1.8, 12]} />
