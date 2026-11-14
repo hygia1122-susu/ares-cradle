@@ -23,6 +23,57 @@ import { STAGES_FIXTURES } from '@/services/api/MockMissionService';
 import { soundEngine } from '@/modules/audio/soundEngine';
 import { MarsWeatherTelemetry, fetchMarsWeather } from '@/modules/story-engine/services/marsWeatherService';
 import { useStoryStore } from './useStoryStore';
+import { buildWorldColliders, isOverColliderFootprint, PHYSICS_CONSTANTS } from '@/modules/character/physicsEngine';
+import { sampleWorldGround, WORLD_BOUNDS } from '@/modules/outpost-3d/worldRegions';
+
+export const PLAYABLE_ROVER_SPEC = {
+  scale: 0.7,
+  radius: 1.55,
+  wheelbase: 1.7,
+  trackWidth: 1.6,
+  groundOffset: 0
+} as const;
+
+function findSafeRoverDismount(
+  roverPos: [number, number, number],
+  heading: number
+): [number, number, number] | null {
+  const clearance = PLAYABLE_ROVER_SPEC.radius + 0.65;
+  const directions: Array<[number, number]> = [
+    [-Math.cos(heading), Math.sin(heading)],
+    [Math.cos(heading), -Math.sin(heading)],
+    [-Math.sin(heading), -Math.cos(heading)],
+    [Math.sin(heading), Math.cos(heading)]
+  ];
+  const colliders = buildWorldColliders(roverPos, true);
+
+  for (const [dx, dz] of directions) {
+    const x = roverPos[0] + dx * clearance;
+    const z = roverPos[2] + dz * clearance;
+    if (
+      x < WORLD_BOUNDS.minX + PLAYABLE_ROVER_SPEC.radius ||
+      x > WORLD_BOUNDS.maxX - PLAYABLE_ROVER_SPEC.radius ||
+      z < WORLD_BOUNDS.minZ + PLAYABLE_ROVER_SPEC.radius ||
+      z > WORLD_BOUNDS.maxZ - PLAYABLE_ROVER_SPEC.radius ||
+      Math.hypot(x - roverPos[0], z - roverPos[2]) < clearance
+    ) continue;
+    if (colliders.some((collider) =>
+      sampleWorldGround(x, z) < collider.topY - PHYSICS_CONSTANTS.STEP_UP_TOLERANCE &&
+      isOverColliderFootprint(x, z, collider, PHYSICS_CONSTANTS.PLAYER_RADIUS)
+    )) continue;
+
+    const y = sampleWorldGround(x, z);
+    const slope = Math.max(
+      Math.abs(sampleWorldGround(x + PHYSICS_CONSTANTS.PLAYER_RADIUS, z) - y),
+      Math.abs(sampleWorldGround(x - PHYSICS_CONSTANTS.PLAYER_RADIUS, z) - y),
+      Math.abs(sampleWorldGround(x, z + PHYSICS_CONSTANTS.PLAYER_RADIUS) - y),
+      Math.abs(sampleWorldGround(x, z - PHYSICS_CONSTANTS.PLAYER_RADIUS) - y)
+    ) / PHYSICS_CONSTANTS.PLAYER_RADIUS;
+    if (slope > 0.35) continue;
+    return [x, y, z];
+  }
+  return null;
+}
 
 import {
   ItemActionResult,
@@ -139,6 +190,8 @@ export interface OutpostStoreState {
   // Phase 13: Exploration Rover & Orrery Sky View
   isDrivingRover: boolean;
   roverPos: [number, number, number];
+  roverHeading: number;
+  roverSpeed: number;
   roverHeadlightMode: 'low' | 'high';
   isSkyViewActive: boolean;
   cameraYaw: number;
@@ -146,6 +199,7 @@ export interface OutpostStoreState {
   toggleDrivingRover: () => void;
   toggleRoverHeadlightMode: () => void;
   setRoverPos: (pos: [number, number, number]) => void;
+  publishRoverState: (pose: { x: number; y: number; z: number; heading: number }, speed: number) => void;
   toggleSkyView: () => void;
   setCameraYaw: (yaw: number) => void;
   setIsMouseDriving: (driving: boolean) => void;
@@ -531,6 +585,8 @@ export const useOutpostStore = create<OutpostStoreState>((set, get) => ({
   // Exploration Rover & Orrery Sky View Implementation
   isDrivingRover: false,
   roverPos: [3.8, -0.32, -2.2],
+  roverHeading: 0,
+  roverSpeed: 0,
   roverHeadlightMode: 'low',
   isSkyViewActive: false,
   toggleRoverHeadlightMode: () => {
@@ -540,7 +596,7 @@ export const useOutpostStore = create<OutpostStoreState>((set, get) => ({
     }));
   },
   toggleDrivingRover: () => {
-    const { isDrivingRover, playerPos, roverPos } = get();
+    const { isDrivingRover, playerPos, roverPos, roverHeading } = get();
     if (!isDrivingRover) {
       // Proximity check (< 2.5m) to board
       const dist = Math.hypot(playerPos[0] - roverPos[0], playerPos[2] - roverPos[2]);
@@ -551,20 +607,40 @@ export const useOutpostStore = create<OutpostStoreState>((set, get) => ({
       soundEngine.playClick(1400);
       set({ isDrivingRover: true });
     } else {
-      // Side dismount: spawn player beside the driver door (1.4m away)
+      const dismountPos = findSafeRoverDismount(roverPos, roverHeading);
+      if (!dismountPos) {
+        soundEngine.playClick(400);
+        return;
+      }
       soundEngine.playClick(1100);
-      const dismountPos: [number, number, number] = [
-        roverPos[0] - 1.4,
-        -0.32,
-        roverPos[2]
-      ];
       set({
         isDrivingRover: false,
-        playerPos: dismountPos
+        playerPos: dismountPos,
+        isMouseDriving: false,
+        joystickVector: { x: 0, y: 0 },
+        roverSpeed: 0
       });
     }
   },
   setRoverPos: (pos: [number, number, number]) => set({ roverPos: pos }),
+  publishRoverState: (pose, speed) => {
+    if (
+      !pose || typeof pose !== 'object' ||
+      ![pose.x, pose.y, pose.z, pose.heading, speed].every(Number.isFinite) ||
+      Math.abs(pose.x) > WORLD_BOUNDS.maxX ||
+      Math.abs(pose.z) > WORLD_BOUNDS.maxZ ||
+      Math.abs(pose.y) > 100 || Math.abs(pose.heading) > Math.PI || Math.abs(speed) > 5
+    ) return;
+    if (!get().isDrivingRover) return;
+    const roverPos: [number, number, number] = [pose.x, pose.y, pose.z];
+    set({
+      roverPos,
+      playerPos: roverPos,
+      roverHeading: pose.heading,
+      roverSpeed: speed,
+      isInsideHabitat: Math.hypot(pose.x, pose.z) < 3.6
+    });
+  },
   toggleSkyView: () => {
     soundEngine.playClick(900);
     set((state) => ({ isSkyViewActive: !state.isSkyViewActive }));

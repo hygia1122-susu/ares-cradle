@@ -9,6 +9,8 @@
  * - Vertical clearance & platform top landing (jump over or onto obstacles with [Space])
  */
 
+import { ADDITIVE_OUTER_COLLIDERS, WORLD_BOUNDS, sampleWorldGround } from '../outpost-3d/worldRegions';
+
 export const PHYSICS_CONSTANTS = {
   GROUND_Y: -0.4,
   MARS_GRAVITY: 9.2,          // m/s² (Low Martian gravity for responsive jumps)
@@ -424,7 +426,17 @@ export const STATIC_WORLD_COLLIDERS: ObstacleCollider[] = [
     radius: 15.2,
     topY: 0.82,
     jumpable: true
-  }
+  },
+  ...ADDITIVE_OUTER_COLLIDERS.map((collider) => ({
+    id: collider.id,
+    label: `${collider.regionId} ${collider.kind}`,
+    type: 'circle' as const,
+    x: collider.x,
+    z: collider.z,
+    radius: collider.radius,
+    topY: sampleWorldGround(collider.x, collider.z) + 3.4,
+    jumpable: false
+  }))
 ];
 
 /**
@@ -450,6 +462,20 @@ export function buildWorldColliders(
       jumpable: true
     }
   ];
+}
+
+export function canRoverOccupy(
+  x: number,
+  z: number,
+  radius: number = PHYSICS_CONSTANTS.ROVER_RADIUS
+): boolean {
+  if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(radius) || radius < 0) return false;
+  if (x < WORLD_BOUNDS.minX + radius || x > WORLD_BOUNDS.maxX - radius ||
+      z < WORLD_BOUNDS.minZ + radius || z > WORLD_BOUNDS.maxZ - radius) return false;
+  const groundY = sampleWorldGround(x, z);
+  return STATIC_WORLD_COLLIDERS.every((collider) =>
+    !resolveHorizontalCollider(x, z, x, z, groundY, radius, collider).collided
+  );
 }
 
 function isPointInOpening(x: number, z: number, openings?: RingOpening[]): boolean {
@@ -725,15 +751,23 @@ export function stepPlayerPhysics(
     vz = (targetZ - state.z) / dt;
   }
 
-  // 4. Planetary Circumnavigation Boundary (80m world radius)
-  const distFromCenter = Math.hypot(targetX, targetZ);
-  if (distFromCenter > 78) {
-    targetX = -targetX * 0.96;
-    targetZ = -targetZ * 0.96;
+  // 4. Clamp to finite world bounds without wrapping or teleporting.
+  const boundedX = Math.max(WORLD_BOUNDS.minX + playerRadius, Math.min(WORLD_BOUNDS.maxX - playerRadius, targetX));
+  const boundedZ = Math.max(WORLD_BOUNDS.minZ + playerRadius, Math.min(WORLD_BOUNDS.maxZ - playerRadius, targetZ));
+  const hitXBoundary = boundedX !== targetX;
+  const hitZBoundary = boundedZ !== targetZ;
+  if (hitXBoundary || hitZBoundary) {
+    targetX = boundedX;
+    targetZ = boundedZ;
+    isBlocked = true;
+    blockedByLabel = 'World Boundary';
+    blockedObstacleJumpable = false;
+    if (hitXBoundary) vx = 0;
+    if (hitZBoundary) vz = 0;
   }
 
   // 5. Support Surface / Platform Landing Check
-  let supportY: number = PHYSICS_CONSTANTS.GROUND_Y;
+  let supportY: number = sampleWorldGround(targetX, targetZ);
   let supportLabel: string | null = null;
 
   for (let i = 0; i < colliders.length; i++) {

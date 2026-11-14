@@ -11,6 +11,7 @@ import { useOutpostStore } from '@/modules/store/useOutpostStore';
 
 import LightingRig from './LightingRig';
 import MarsTerrain from './MarsTerrain';
+import OuterRegions from './OuterRegions';
 import HabitatDome from './HabitatDome';
 import HabitatInterior from './HabitatInterior';
 import SolarArray from './SolarArray';
@@ -172,6 +173,7 @@ export const MarsCanvas: React.FC = () => {
 
         {/* Mars Surface, Craters, Foundation & Mineral Rocks */}
         <MarsTerrain />
+        <OuterRegions />
 
         {/* Pressurized Habitat with Reactive Bioluminescent Core */}
         <HabitatDome />

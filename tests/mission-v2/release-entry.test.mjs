@@ -42,11 +42,13 @@ function selected(root) {
   return lazyType.factory.toString().includes('./game/mission/MissionGame') ? 'mission' : 'review';
 }
 
-test('release entry prioritizes rover review, defaults and aliases to mission, and gates legacy explicitly', () => {
-  assert.equal(selected(render('?review=rover')), 'review');
-  assert.equal(selected(render('?mission=frontiers')), 'mission');
-  assert.equal(selected(render('')), 'mission');
+test('release entry defaults to original Mars HUD, keeps rover review priority, and opts into Frontiers explicitly', () => {
+  assert.equal(selected(render('')), 'legacy');
+  assert.equal(selected(render('?unknown=1')), 'legacy');
   assert.equal(selected(render('?legacy=1')), 'legacy');
+  assert.equal(selected(render('?mission=frontiers')), 'mission');
+  assert.equal(selected(render('?review=rover')), 'review');
   assert.equal(selected(render('?review=rover&legacy=1')), 'review');
+  assert.equal(selected(render('?review=rover&mission=frontiers')), 'review');
   assert.equal(selected(render('?mission=frontiers&legacy=1')), 'legacy');
 });
