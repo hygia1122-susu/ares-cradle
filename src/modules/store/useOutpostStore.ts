@@ -4,27 +4,36 @@
  */
 
 import { create } from 'zustand';
-import {
-  ResourceState,
-  PowerAllocationState,
-  SolPhase,
-  StageConfig,
-  GameEvent,
-  DebriefReport
-} from '@/modules/simulation-engine/types';
-import {
-  calculateSimulationStep,
-  calculateDebriefReport,
-  determineSolPhase,
-  SIM_CONSTANTS
-} from '@/modules/simulation-engine/formulas';
+import { SolPhase, StageConfig, GameEvent } from '@/modules/simulation-engine/types';
 import { missionService } from '@/services/api';
 import { STAGES_FIXTURES } from '@/services/api/MockMissionService';
 import { soundEngine } from '@/modules/audio/soundEngine';
 import { MarsWeatherTelemetry, fetchMarsWeather } from '@/modules/story-engine/services/marsWeatherService';
 import { useStoryStore } from './useStoryStore';
-import { buildWorldColliders, isOverColliderFootprint, PHYSICS_CONSTANTS } from '@/modules/character/physicsEngine';
-import { sampleWorldGround, WORLD_BOUNDS } from '@/modules/outpost-3d/worldRegions';
+import { getRegionByPosition, sampleWorldGround, WORLD_BOUNDS, WORLD_REGIONS, type RegionId } from '@/modules/outpost-3d/worldRegions';
+import {
+  createInitialExplorationProgress,
+  EXPLORATION_STORAGE_KEY,
+  parseExplorationProgress,
+  serializeExplorationProgress,
+  tickExplorationProgress,
+  collectScientificElement,
+  consumeExplorationItem,
+  type ExplorationProgress
+} from './explorationProgress';
+import {
+  createInitialExpeditionProgress,
+  EXPEDITION_STORAGE_KEY,
+  parseExpeditionProgress,
+  serializeExpeditionProgress,
+  transitionExpeditionProgress,
+  type ExpeditionCommand,
+  type ExpeditionProgress,
+  type ImpactObservationId,
+  type ImpactToolEvidence,
+  type ImpactSignalId,
+  type ImpactContextId
+} from './expeditionProgress';
 
 export const PLAYABLE_ROVER_SPEC = {
   scale: 0.7,
@@ -33,47 +42,6 @@ export const PLAYABLE_ROVER_SPEC = {
   trackWidth: 1.6,
   groundOffset: 0
 } as const;
-
-function findSafeRoverDismount(
-  roverPos: [number, number, number],
-  heading: number
-): [number, number, number] | null {
-  const clearance = PLAYABLE_ROVER_SPEC.radius + 0.65;
-  const directions: Array<[number, number]> = [
-    [-Math.cos(heading), Math.sin(heading)],
-    [Math.cos(heading), -Math.sin(heading)],
-    [-Math.sin(heading), -Math.cos(heading)],
-    [Math.sin(heading), Math.cos(heading)]
-  ];
-  const colliders = buildWorldColliders(roverPos, true);
-
-  for (const [dx, dz] of directions) {
-    const x = roverPos[0] + dx * clearance;
-    const z = roverPos[2] + dz * clearance;
-    if (
-      x < WORLD_BOUNDS.minX + PLAYABLE_ROVER_SPEC.radius ||
-      x > WORLD_BOUNDS.maxX - PLAYABLE_ROVER_SPEC.radius ||
-      z < WORLD_BOUNDS.minZ + PLAYABLE_ROVER_SPEC.radius ||
-      z > WORLD_BOUNDS.maxZ - PLAYABLE_ROVER_SPEC.radius ||
-      Math.hypot(x - roverPos[0], z - roverPos[2]) < clearance
-    ) continue;
-    if (colliders.some((collider) =>
-      sampleWorldGround(x, z) < collider.topY - PHYSICS_CONSTANTS.STEP_UP_TOLERANCE &&
-      isOverColliderFootprint(x, z, collider, PHYSICS_CONSTANTS.PLAYER_RADIUS)
-    )) continue;
-
-    const y = sampleWorldGround(x, z);
-    const slope = Math.max(
-      Math.abs(sampleWorldGround(x + PHYSICS_CONSTANTS.PLAYER_RADIUS, z) - y),
-      Math.abs(sampleWorldGround(x - PHYSICS_CONSTANTS.PLAYER_RADIUS, z) - y),
-      Math.abs(sampleWorldGround(x, z + PHYSICS_CONSTANTS.PLAYER_RADIUS) - y),
-      Math.abs(sampleWorldGround(x, z - PHYSICS_CONSTANTS.PLAYER_RADIUS) - y)
-    ) / PHYSICS_CONSTANTS.PLAYER_RADIUS;
-    if (slope > 0.35) continue;
-    return [x, y, z];
-  }
-  return null;
-}
 
 import {
   ItemActionResult,
@@ -110,7 +78,7 @@ export interface OutpostStoreState {
   isGameOver: boolean;
   isVictory: boolean;
   failureReason: string | null;
-  debriefReport: DebriefReport | null;
+  debriefReport: import('@/modules/simulation-engine/types').DebriefReport | null;
   activeWarnings: string[];
   isMuted: boolean;
 
@@ -228,6 +196,34 @@ export interface OutpostStoreState {
   domeEvolutionLevel: number;
   roverUpgradeLevel: number;
   currentSortiePhase: 'briefing' | 'field' | 'return' | 'lab';
+  expeditionProgress: ExpeditionProgress;
+  expeditionStorageWarning: string | null;
+  expeditionPersistenceBlocked: boolean;
+  expeditionActionError: string | null;
+  exploration: ExplorationProgress;
+  explorationWarning: string | null;
+  explorationPersistenceBlocked: boolean;
+  inspectScientificElement: (id: string) => boolean;
+  activeScienceEntryId: string | null;
+  openScienceEntry: (id: string | null) => void;
+  consumeSurvivalItem: (itemId: string) => boolean;
+  remoteRegionId: RegionId | null;
+  regionalRoverPoses: Record<RegionId, { position: [number, number, number]; heading: number }>;
+  cameraPitch: number;
+  setCameraLook: (yaw: number, pitch: number) => void;
+  isPointerLocked: boolean;
+  setPointerLocked: (locked: boolean) => void;
+  isManualOpen: boolean;
+  setManualOpen: (open: boolean) => void;
+  activeWaypointRegionId: RegionId;
+  setWaypointRegion: (id: RegionId) => void;
+  explorationNotice: string | null;
+  dismissExplorationNotice: () => void;
+  startExpedition: () => void;
+  activateExpeditionBase: (regionId: RegionId) => boolean;
+  observeImpact: (observationId: ImpactObservationId, evidence: ImpactToolEvidence, expectedRevision?: number) => boolean;
+  payImpactSurvey: (confirmed: boolean, expectedRevision?: number) => boolean;
+  matchImpactRecords: (signal: ImpactSignalId, context: ImpactContextId, expectedRevision?: number) => boolean;
   setDomeEvolutionLevel: (lvl: number) => void;
   setRoverUpgradeLevel: (lvl: number) => void;
   setSortiePhase: (phase: 'briefing' | 'field' | 'return' | 'lab') => void;
@@ -250,7 +246,261 @@ export interface OutpostStoreState {
 
 const defaultStageConfig = STAGES_FIXTURES[1];
 
-export const useOutpostStore = create<OutpostStoreState>((set, get) => ({
+function loadExpeditionProgress(): {
+  progress: ExpeditionProgress;
+  warning: string | null;
+  persistenceBlocked: boolean;
+} {
+  const initial = createInitialExpeditionProgress();
+  if (typeof window === 'undefined') return { progress: initial, warning: null, persistenceBlocked: false };
+  try {
+    const raw = window.localStorage.getItem(EXPEDITION_STORAGE_KEY);
+    if (raw === null) return { progress: initial, warning: null, persistenceBlocked: false };
+    const parsed = parseExpeditionProgress(raw);
+    if (parsed.ok) return { progress: parsed.state, warning: null, persistenceBlocked: false };
+    return {
+      progress: initial,
+      warning: `Saved expedition data is ${parsed.reason} and was preserved.`,
+      persistenceBlocked: true
+    };
+  } catch {
+    return { progress: initial, warning: 'Progress is not saved', persistenceBlocked: true };
+  }
+}
+
+const initialExpedition = loadExpeditionProgress();
+
+function loadExplorationProgress(): {
+  progress: ExplorationProgress;
+  warning: string | null;
+  persistenceBlocked: boolean;
+} {
+  const initial = createInitialExplorationProgress();
+  if (typeof window === 'undefined') return { progress: initial, warning: null, persistenceBlocked: false };
+  try {
+    const raw = window.localStorage.getItem(EXPLORATION_STORAGE_KEY);
+    if (raw === null) return { progress: initial, warning: null, persistenceBlocked: false };
+    const parsed = parseExplorationProgress(raw);
+    if (parsed.ok) return { progress: parsed.state, warning: null, persistenceBlocked: false };
+    return { progress: initial, warning: `Saved exploration data is ${parsed.reason} and was preserved.`, persistenceBlocked: true };
+  } catch {
+    return { progress: initial, warning: 'Progress is not saved', persistenceBlocked: true };
+  }
+}
+
+function loadManualOpen(): boolean {
+  if (typeof window === 'undefined') return true;
+  try { return window.localStorage.getItem('ares-cradle-controls-v1') !== 'viewed'; }
+  catch { return true; }
+}
+
+const initialExploration = loadExplorationProgress();
+const initialManualOpen = loadManualOpen();
+const initialRegionalRoverPoses = Object.fromEntries(WORLD_REGIONS.map((region) => [region.id, {
+  position: [region.safeParking.x, sampleWorldGround(region.safeParking.x, region.safeParking.z), region.safeParking.z] as [number, number, number],
+  heading: 0
+}])) as Record<RegionId, { position: [number, number, number]; heading: number }>;
+
+export const useOutpostStore = create<OutpostStoreState>((set, get) => {
+  let lastExplorationPersistSeconds = initialExploration.progress.activeSeconds;
+  const shownDepletionNotices = new Set<'air' | 'meals'>();
+  const persistExploration = (progress: ExplorationProgress) => {
+    const current = get();
+    if (current.explorationPersistenceBlocked) return { warning: current.explorationWarning, blocked: true };
+    try {
+      if (typeof window !== 'undefined') window.localStorage.setItem(EXPLORATION_STORAGE_KEY, serializeExplorationProgress(progress));
+      lastExplorationPersistSeconds = progress.activeSeconds;
+      return { warning: null, blocked: false };
+    } catch {
+      return { warning: 'Progress is not saved', blocked: true };
+    }
+  };
+  const saveExplorationEvent = (progress: ExplorationProgress) => {
+    const result = persistExploration(progress);
+    set({ exploration: progress, explorationWarning: result.warning, explorationPersistenceBlocked: result.blocked });
+  };
+  const openUnlockedScienceEntry = (id: string) => {
+    if (get().exploration.collected.includes(id)) set({ activeScienceEntryId: id });
+    else set({ explorationNotice: 'Scientific entry is still locked.' });
+  };
+  const commitImpactCommand = (command: Extract<ExpeditionCommand, { type: 'OBSERVE_IMPACT' | 'PAY_IMPACT' | 'MATCH_IMPACT' }>): boolean => {
+    const current = get();
+    if (current.isGameOver || current.isVictory) {
+      set({ expeditionActionError: 'terminal-state' });
+      return false;
+    }
+    if (command.type === 'PAY_IMPACT' && command.confirmed !== true) {
+      set({ expeditionActionError: 'invalid-evidence' });
+      return false;
+    }
+    const [x, y, z] = current.playerPos;
+    const result = transitionExpeditionProgress(current.expeditionProgress, command, {
+      player: { x, y, z },
+      isDrivingRover: current.isDrivingRover,
+      isGrounded: current.isPlayerGrounded,
+      actualRegion: getRegionByPosition(x, z).id
+    });
+    if (!result.changed) {
+      set({ expeditionActionError: result.error ?? null });
+      return false;
+    }
+    let warning = current.expeditionPersistenceBlocked ? current.expeditionStorageWarning : null;
+    let persistenceBlocked = current.expeditionPersistenceBlocked;
+    if (!persistenceBlocked) {
+      try {
+        window.localStorage.setItem(EXPEDITION_STORAGE_KEY, serializeExpeditionProgress(result.state));
+      } catch {
+        warning = 'Progress is not saved';
+        persistenceBlocked = true;
+      }
+    }
+    set({ expeditionProgress: result.state, expeditionStorageWarning: warning, expeditionPersistenceBlocked: persistenceBlocked, expeditionActionError: null });
+    return true;
+  };
+
+  return {
+  expeditionProgress: initialExpedition.progress,
+  expeditionStorageWarning: initialExpedition.warning,
+  expeditionPersistenceBlocked: initialExpedition.persistenceBlocked,
+  expeditionActionError: null,
+  exploration: initialExploration.progress,
+  explorationWarning: initialExploration.warning,
+  explorationPersistenceBlocked: initialExploration.persistenceBlocked,
+  inspectScientificElement: (id) => {
+    const state = get();
+    const position = state.isDrivingRover && state.remoteRegionId
+      ? state.roverPos
+      : state.playerPos;
+    const context = {
+      position,
+      isRemote: state.isDrivingRover,
+      remoteRegionId: state.remoteRegionId,
+      isGrounded: state.isDrivingRover || state.isPlayerGrounded
+    };
+    const alreadyCollected = state.exploration.collected.includes(id);
+    const result = alreadyCollected
+      ? { state: state.exploration, changed: false }
+      : collectScientificElement(state.exploration, id, context);
+    if (result.error) {
+      set({ explorationNotice: result.error });
+      return false;
+    }
+    if (!result.changed && !alreadyCollected) {
+      set({ explorationNotice: 'Scientific element is not within inspection range.' });
+      return false;
+    }
+    if (result.changed) saveExplorationEvent(result.state);
+    openUnlockedScienceEntry(id);
+    set({ explorationNotice: result.completedRegion
+      ? `Regional science complete. Supply package delivered to ${result.completedRegion}.`
+      : null });
+    if (typeof document !== 'undefined' && document.pointerLockElement && typeof document.exitPointerLock === 'function') document.exitPointerLock();
+    return true;
+  },
+  activeScienceEntryId: null,
+  openScienceEntry: (id) => {
+    if (id === null) { set({ activeScienceEntryId: null }); return; }
+    openUnlockedScienceEntry(id);
+    if (get().exploration.collected.includes(id) && typeof document !== 'undefined' && document.pointerLockElement && typeof document.exitPointerLock === 'function') document.exitPointerLock();
+  },
+  consumeSurvivalItem: (itemId) => {
+    if (!['air_canister', 'space_apple', 'backup_battery'].includes(itemId)) return false;
+    const state = get();
+    if ((state.inventory[itemId] ?? 0) < 1 || (state.exploration.supplies[itemId as keyof typeof state.exploration.supplies] ?? 0) < 1) {
+      set({ explorationNotice: 'No supplies of this type remain.' });
+      return false;
+    }
+    const result = consumeExplorationItem(state.exploration, itemId);
+    if (result.error || !result.changed) {
+      set({ explorationNotice: result.error ?? 'This supply has no effect right now.' });
+      return false;
+    }
+    const persisted = persistExploration(result.state);
+    set({
+      exploration: result.state,
+      explorationWarning: persisted.warning,
+      explorationPersistenceBlocked: persisted.blocked,
+      inventory: { ...state.inventory, [itemId]: result.state.supplies[itemId as keyof typeof result.state.supplies] },
+      explorationNotice: null
+    });
+    return true;
+  },
+  remoteRegionId: null,
+  regionalRoverPoses: initialRegionalRoverPoses,
+  cameraPitch: 0,
+  setCameraLook: (yaw, pitch) => {
+    if (!Number.isFinite(yaw) || !Number.isFinite(pitch)) return;
+    const wrappedYaw = ((yaw + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+    set({ cameraYaw: wrappedYaw, cameraPitch: Math.max(-1.45, Math.min(1.45, pitch)) });
+  },
+  isPointerLocked: false,
+  setPointerLocked: (locked) => set({ isPointerLocked: Boolean(locked) }),
+  isManualOpen: initialManualOpen,
+  setManualOpen: (open) => {
+    set({ isManualOpen: open });
+    if (!open && typeof window !== 'undefined') {
+      try { window.localStorage.setItem('ares-cradle-controls-v1', 'viewed'); }
+      catch { set({ explorationWarning: 'Controls viewed, but this preference could not be saved.' }); }
+    }
+  },
+  activeWaypointRegionId: 'dust',
+  setWaypointRegion: (id) => set({ activeWaypointRegionId: id }),
+  explorationNotice: null,
+  dismissExplorationNotice: () => set({ explorationNotice: null }),
+  startExpedition: () => {
+    const current = get();
+    if (current.isGameOver || current.isVictory) return;
+    const result = transitionExpeditionProgress(current.expeditionProgress, { type: 'START' });
+    if (!result.changed) return;
+    let warning = current.expeditionPersistenceBlocked ? current.expeditionStorageWarning : null;
+    let persistenceBlocked = current.expeditionPersistenceBlocked;
+    if (!persistenceBlocked) {
+      try {
+        window.localStorage.setItem(EXPEDITION_STORAGE_KEY, serializeExpeditionProgress(result.state));
+      } catch {
+        warning = 'Progress is not saved';
+        persistenceBlocked = true;
+      }
+    }
+    set({ expeditionProgress: result.state, expeditionStorageWarning: warning, expeditionPersistenceBlocked: persistenceBlocked });
+  },
+  activateExpeditionBase: (regionId: RegionId) => {
+    const current = get();
+    const [x, y, z] = current.playerPos;
+    const region = getRegionByPosition(x, z);
+    const result = transitionExpeditionProgress(current.expeditionProgress, { type: 'ACTIVATE', regionId }, {
+      player: { x, y, z },
+      isDrivingRover: current.isDrivingRover,
+      isGrounded: current.isPlayerGrounded,
+      actualRegion: region.id
+    });
+    if (!result.changed) return false;
+    let warning = current.expeditionPersistenceBlocked ? current.expeditionStorageWarning : null;
+    let persistenceBlocked = current.expeditionPersistenceBlocked;
+    if (!persistenceBlocked) {
+      try {
+        window.localStorage.setItem(EXPEDITION_STORAGE_KEY, serializeExpeditionProgress(result.state));
+      } catch {
+        warning = 'Progress is not saved';
+        persistenceBlocked = true;
+      }
+    }
+    set({ expeditionProgress: result.state, expeditionStorageWarning: warning, expeditionPersistenceBlocked: persistenceBlocked });
+    return true;
+  },
+  observeImpact: (observationId, evidence, expectedRevision) => commitImpactCommand({
+    type: 'OBSERVE_IMPACT', observationId, evidence, expectedRevision: expectedRevision ?? get().expeditionProgress.revision
+  }),
+  payImpactSurvey: (confirmed, expectedRevision) => {
+    if (confirmed !== true) {
+      set({ expeditionActionError: 'invalid-evidence' });
+      return false;
+    }
+    return commitImpactCommand({ type: 'PAY_IMPACT', confirmed: true, expectedRevision: expectedRevision ?? get().expeditionProgress.revision });
+  },
+  matchImpactRecords: (signal, context, expectedRevision) => commitImpactCommand({
+    type: 'MATCH_IMPACT', signal, context, expectedRevision: expectedRevision ?? get().expeditionProgress.revision
+  }),
   // Initial state derived from Stage 1
   solTime: 0.0,
   currentSol: defaultStageConfig.sol,
@@ -290,10 +540,11 @@ export const useOutpostStore = create<OutpostStoreState>((set, get) => ({
   isBackpackOpen: false,
   inventory: {
     flashlight: 1,
+    air_canister: initialExploration.progress.supplies.air_canister,
     sonic_wiper: 3,
     space_tape: 2,
-    backup_battery: 1,
-    space_apple: 2,
+    backup_battery: initialExploration.progress.supplies.backup_battery,
+    space_apple: initialExploration.progress.supplies.space_apple,
     water_canister: 1,
     mineral_shard: 1,
     thermal_blanket: 1,
@@ -350,6 +601,14 @@ export const useOutpostStore = create<OutpostStoreState>((set, get) => ({
     return added;
   },
   executeItemAction: (itemId: string) => {
+    if (['air_canister', 'space_apple', 'backup_battery'].includes(itemId)) {
+      const ok = get().consumeSurvivalItem(itemId);
+      const result: ItemActionResult = ok
+        ? { ok: true, itemId, consumed: 1, feedback: 'Exploration supply consumed.' }
+        : { ok: false, itemId, code: 'NO_EFFECT', reason: get().explorationNotice ?? 'Supply had no effect.' };
+      set({ lastItemActionResult: result });
+      return result;
+    }
     const state = get();
     const storyState = useStoryStore.getState();
     const hasActiveLeak = state.activeEvents.some(
@@ -584,7 +843,7 @@ export const useOutpostStore = create<OutpostStoreState>((set, get) => ({
 
   // Exploration Rover & Orrery Sky View Implementation
   isDrivingRover: false,
-  roverPos: [3.8, -0.32, -2.2],
+  roverPos: initialRegionalRoverPoses.dust.position,
   roverHeading: 0,
   roverSpeed: 0,
   roverHeadlightMode: 'low',
@@ -596,50 +855,90 @@ export const useOutpostStore = create<OutpostStoreState>((set, get) => ({
     }));
   },
   toggleDrivingRover: () => {
-    const { isDrivingRover, playerPos, roverPos, roverHeading } = get();
-    if (!isDrivingRover) {
-      // Proximity check (< 2.5m) to board
-      const dist = Math.hypot(playerPos[0] - roverPos[0], playerPos[2] - roverPos[2]);
-      if (dist > 2.5) {
+    const state = get();
+    if (!state.isDrivingRover) {
+      if (state.exploration.survival.energyEU <= 0) {
+        set({ explorationNotice: 'Remote rover control requires available energy.' });
+        return;
+      }
+      const [x, , z] = state.playerPos;
+      const region = getRegionByPosition(x, z);
+      const nearest = WORLD_REGIONS.reduce((best, candidate) => {
+        const distance = Math.hypot(x - candidate.baseConsole.x, z - candidate.baseConsole.z);
+        return distance < best.distance ? { region: candidate, distance } : best;
+      }, { region: WORLD_REGIONS[0], distance: Infinity });
+      if (state.isGameOver || state.isVictory || !state.isPlayerGrounded ||
+          state.isBackpackOpen || state.isManualOpen || state.activeScienceEntryId !== null || state.isClassroomOpen || state.isDatapadOpen || state.isBrownoutQuizOpen || state.isVictory || state.isGameOver ||
+          (typeof document !== 'undefined' && Boolean(document.querySelector('[role="dialog"]'))) ||
+          region.id !== nearest.region.id || nearest.distance > 18) {
         soundEngine.playClick(400);
         return;
       }
       soundEngine.playClick(1400);
-      set({ isDrivingRover: true });
-    } else {
-      const dismountPos = findSafeRoverDismount(roverPos, roverHeading);
-      if (!dismountPos) {
-        soundEngine.playClick(400);
-        return;
+      const storedPose = state.regionalRoverPoses[nearest.region.id];
+      set({
+        isSimulating: true,
+        isDrivingRover: true,
+        remoteRegionId: nearest.region.id,
+        roverPos: storedPose.position,
+        roverHeading: storedPose.heading,
+        roverSpeed: 0,
+        joystickVector: { x: 0, y: 0 },
+        isMouseDriving: false,
+        isPointerLocked: false
+      });
+      if (typeof document !== 'undefined' && document.pointerLockElement && typeof document.exitPointerLock === 'function') {
+        document.exitPointerLock();
       }
+    } else {
       soundEngine.playClick(1100);
+      const remoteRegionId = state.remoteRegionId;
+      const regionalRoverPoses = remoteRegionId ? {
+        ...state.regionalRoverPoses,
+        [remoteRegionId]: { position: state.roverPos, heading: state.roverHeading }
+      } : state.regionalRoverPoses;
       set({
         isDrivingRover: false,
-        playerPos: dismountPos,
+        remoteRegionId: null,
+        regionalRoverPoses,
         isMouseDriving: false,
         joystickVector: { x: 0, y: 0 },
-        roverSpeed: 0
+        roverSpeed: 0,
+        isPointerLocked: false
       });
+      if (typeof document !== 'undefined' && document.pointerLockElement && typeof document.exitPointerLock === 'function') {
+        document.exitPointerLock();
+      }
     }
   },
-  setRoverPos: (pos: [number, number, number]) => set({ roverPos: pos }),
+  setRoverPos: (pos: [number, number, number]) => {
+    const state = get();
+    if (!pos.every(Number.isFinite) || pos.some((value) => Math.abs(value) > 300)) return;
+    set({ roverPos: pos });
+    if (state.isDrivingRover && state.remoteRegionId) set((current) => ({
+      regionalRoverPoses: { ...current.regionalRoverPoses, [state.remoteRegionId!]: { position: pos, heading: state.roverHeading } }
+    }));
+  },
   publishRoverState: (pose, speed) => {
     if (
       !pose || typeof pose !== 'object' ||
       ![pose.x, pose.y, pose.z, pose.heading, speed].every(Number.isFinite) ||
       Math.abs(pose.x) > WORLD_BOUNDS.maxX ||
       Math.abs(pose.z) > WORLD_BOUNDS.maxZ ||
-      Math.abs(pose.y) > 100 || Math.abs(pose.heading) > Math.PI || Math.abs(speed) > 5
+      Math.abs(pose.y) > 100 || Math.abs(pose.heading) > Math.PI || speed < -3 || speed > 5
     ) return;
-    if (!get().isDrivingRover) return;
+    const state = get();
+    if (!state.isDrivingRover || !state.remoteRegionId) return;
+    const actualRegion = getRegionByPosition(pose.x, pose.z);
+    const region = WORLD_REGIONS.find(({ id }) => id === state.remoteRegionId);
+    if (!region || actualRegion.id !== state.remoteRegionId ||
+        Math.hypot(pose.x - region.center.x, pose.z - region.center.z) > 75) return;
     const roverPos: [number, number, number] = [pose.x, pose.y, pose.z];
-    set({
-      roverPos,
-      playerPos: roverPos,
-      roverHeading: pose.heading,
-      roverSpeed: speed,
-      isInsideHabitat: Math.hypot(pose.x, pose.z) < 3.6
-    });
+    const regionalRoverPoses = {
+      ...state.regionalRoverPoses,
+      [state.remoteRegionId]: { position: roverPos, heading: pose.heading }
+    };
+    set({ roverPos, roverHeading: pose.heading, roverSpeed: speed, regionalRoverPoses });
   },
   toggleSkyView: () => {
     soundEngine.playClick(900);
@@ -821,242 +1120,46 @@ export const useOutpostStore = create<OutpostStoreState>((set, get) => ({
   tick: (deltaSeconds = 0.1) => {
     const state = get();
     if (!state.isSimulating || state.isGameOver || state.isVictory) return;
-
-    // Unified Modal Pause Gate (Prompt 1 Section 7 & Prompt 2 Section 6):
-    // Pause simulation drain whenever the learner is reading a briefing, science card, lab, or inventory dialog.
-    const storyModalState = useStoryStore.getState();
-    const isModalPausingSim =
-      state.isBackpackOpen ||
-      state.isDatapadOpen ||
-      state.isClassroomOpen ||
-      state.isBrownoutQuizOpen ||
-      storyModalState.isBriefingOpen ||
-      storyModalState.isLabStationOpen ||
-      storyModalState.isScienceCardOpen ||
-      storyModalState.isChapterSelectOpen;
-
-    if (isModalPausingSim) return;
-
-    const dt = Math.max(0, Math.min(0.1, deltaSeconds));
-    const nextSolTime = state.solTime + dt;
-    const stageDuration = state.stageConfig.durationSeconds || SIM_CONSTANTS.SOL_DURATION_SECONDS;
-
-    // 1. Update and check Game Events status based on solTime
-    const updatedEvents = state.activeEvents.map((evt) => {
-      const shouldBeActive =
-        nextSolTime >= evt.triggerSolTime &&
-        nextSolTime < evt.triggerSolTime + evt.durationSeconds;
-      const isResolved = nextSolTime >= evt.triggerSolTime + evt.durationSeconds;
-
-      return {
-        ...evt,
-        active: shouldBeActive,
-        resolved: isResolved
-      };
-    });
-
-    // Sound alert trigger when an event begins
-    const hasNewlyActivatedEvent = updatedEvents.some(
-      (e) => e.active && !state.activeEvents.find((prev) => prev.id === e.id)?.active
-    );
-    if (hasNewlyActivatedEvent) {
-      soundEngine.playAlarm();
-    }
-
-    // 2. Prepare Resource and Allocation objects for simulation step
-    const currentResourceState: ResourceState = {
-      solarKw: state.solarIntake,
-      batteryKwh: state.batteryKwh,
-      batteryCapacityKwh: state.batteryCapacityKwh,
-      batteryPercent: state.battery,
-      oxygenPercent: state.oxygen,
-      temperatureCelsius: state.temperature,
-      dustCoverage: state.dustCoverage,
-      netPowerKw: state.netPower
-    };
-
-    const powerAllocations: PowerAllocationState = {
-      powerPriorityOxygen: state.powerPriorityOxygen,
-      powerPriorityHeaters: state.powerPriorityHeaters,
-      emergencySaverActive: state.emergencyPowerSaver
-    };
-
-    // 3. Compute simulation step
-    const stepResult = calculateSimulationStep({
-      currentState: currentResourceState,
-      allocations: powerAllocations,
-      solTime: nextSolTime,
-      baseSolarMaxKw: state.stageConfig.baseSolarMaxKw,
-      habBaseLoadKw: state.stageConfig.habBaseLoadKw,
-      controllablePowerKw: state.stageConfig.controllablePowerKw,
-      ambientTemperatureCelsius: state.stageConfig.ambientTemperatureCelsius,
-      activeEvents: updatedEvents,
-      deltaSeconds: dt
-    });
-
-    const { nextState, warnings } = stepResult;
-
-    // Interior Habitat Sanctuary: Replenish Oxygen & Thermal Balance (architecture.md 3.2)
-    if (state.isInsideHabitat) {
-      nextState.oxygenPercent = Math.min(20.9, nextState.oxygenPercent + dt * 0.8);
-      nextState.temperatureCelsius = Math.min(20.0, nextState.temperatureCelsius + dt * 1.2);
-    }
-
-    // Auto Eco-Power Mode during Exploration Expeditions (> 14m from base)
-    const isOutOnExpedition = Math.hypot(state.playerPos[0], state.playerPos[2]) > 14;
-    if (isOutOnExpedition) {
-      // Base non-essential power drain is safely throttled to prevent brownout collapses
-      nextState.batteryPercent = Math.max(22.0, nextState.batteryPercent);
-      nextState.temperatureCelsius = Math.max(12.0, nextState.temperatureCelsius);
-      nextState.oxygenPercent = Math.max(20.0, nextState.oxygenPercent);
-    }
-
-    const nextPhase = determineSolPhase(nextSolTime);
-
-    // 4. Evaluate Critical Failure conditions
-    let isGameOver = false;
-    let failureReason: string | null = null;
-
-    if (nextState.oxygenPercent < 15.0) {
-      isGameOver = true;
-      failureReason = 'Hypoxia alert: Habitat oxygen dropped below lethal threshold (15%)!';
-    } else if (nextState.temperatureCelsius < -30.0) {
-      isGameOver = true;
-      failureReason = 'Freezing emergency: Habitat heaters failed to prevent deep freeze (-30°C)!';
-    } else if (nextState.batteryPercent <= 0 && nextPhase === 'Night') {
-      // Extended brownout in freezing dark
-      if (nextState.temperatureCelsius < 0 && !isOutOnExpedition) {
-        // Emergency Space Quiz intervention before terminal failure
-        if (!state.hasUsedBrownoutQuiz) {
-          soundEngine.playAlarm();
-          soundEngine.stopPowerHum();
-          set({
-            isSimulating: false,
-            isBrownoutQuizOpen: true,
-            hasUsedBrownoutQuiz: true,
-            battery: 0,
-            batteryKwh: 0
-          });
-          return;
-        }
-        isGameOver = true;
-        failureReason = 'Total outpost brownout during the frigid Martian night!';
+    const paused = state.isBackpackOpen || state.isDatapadOpen || state.isClassroomOpen || state.isBrownoutQuizOpen ||
+      state.isManualOpen || state.activeScienceEntryId !== null ||
+      (typeof document !== 'undefined' && (document.hidden || Boolean(document.querySelector('[role="dialog"]'))));
+    if (paused) return;
+    const safeDelta = Number.isFinite(deltaSeconds) ? Math.max(0, Math.min(deltaSeconds ?? 0, 1)) : 0;
+    const result = tickExplorationProgress(state.exploration, safeDelta);
+    if (result !== state.exploration) {
+      const nextSolTime = (state.solTime + safeDelta / 90) % 60;
+      const nextSolPhase = state.solPhase;
+      const shouldPersist = result.activeSeconds - lastExplorationPersistSeconds >= 5;
+      if (shouldPersist) {
+        const persisted = persistExploration(result);
+        set({ exploration: result, explorationWarning: persisted.warning, explorationPersistenceBlocked: persisted.blocked,
+          solTime: nextSolTime, solPhase: nextSolPhase });
+      } else set({ exploration: result, solTime: nextSolTime, solPhase: nextSolPhase });
+      if (result.survival.energyEU <= 0 && state.isDrivingRover) {
+        get().toggleDrivingRover();
+        set({ explorationNotice: 'Remote rover control ended because available energy was depleted.' });
+      }
+      for (const resource of ['air', 'meals'] as const) {
+        if (result.survival[resource] > 0) shownDepletionNotices.delete(resource);
+      }
+      const depletion = (['air', 'meals'] as const).find((resource) =>
+        result.survival[resource] <= 0 && !shownDepletionNotices.has(resource)
+      );
+      if (depletion && !get().explorationNotice) {
+        shownDepletionNotices.add(depletion);
+        set({ explorationNotice: depletion === 'air'
+          ? 'Air reserve depleted. Use an air canister in your backpack; sprint is unavailable.'
+          : 'Food reserve depleted. Use a space apple in your backpack; sprint is unavailable.' });
       }
     }
-
-    // 5. Objective-Driven Stage Victory:
-    // Only triggers when cadet has completed all current Sol objectives AND safely returned to base!
-    let isVictory = false;
-    let debriefReport: DebriefReport | null = null;
-
-    const isAtBase = Math.hypot(state.playerPos[0], state.playerPos[2]) < 7.0;
-    const currentStoryChapter = useStoryStore.getState().getCurrentChapter();
-
-    // Auto-complete return-to-base objective when cadet safely reaches habitat airlock
-    const returnObj = currentStoryChapter.objectives.find(
-      (o: any) => o.id.includes('return-base') && !o.completed
-    );
-    if (returnObj && isAtBase) {
-      const otherCompleted = currentStoryChapter.objectives
-        .filter((o: any) => o.id !== returnObj.id)
-        .every((o: any) => o.completed);
-      if (otherCompleted) {
-        useStoryStore.getState().completeObjective(returnObj.id);
-      }
-    }
-
-    const allObjectivesCompleted =
-      currentStoryChapter.objectives.length > 0 &&
-      currentStoryChapter.objectives.every((o: any) => o.completed);
-
-    if (!isGameOver && allObjectivesCompleted && isAtBase && !state.isVictory) {
-      isVictory = true;
-      soundEngine.playSuccessChime();
-      soundEngine.stopPowerHum();
-      const nextEvolutionLevel = Math.max(state.domeEvolutionLevel, (currentStoryChapter.chapterNumber || 1) + 1);
-      set({
-        domeEvolutionLevel: nextEvolutionLevel,
-        roverUpgradeLevel: nextEvolutionLevel,
-        currentSortiePhase: 'lab'
-      });
-      get().triggerCelebration(
-        `SOL ${state.stageConfig.sol} ACCOMPLISHED!`,
-        `Base & Rover upgraded! All mission objectives completed and specimens safely delivered.`,
-        3
-      );
-      const debriefMath = calculateDebriefReport(
-        state.activeStageId,
-        state.stageConfig.title,
-        nextState,
-        state.stageConfig.sol,
-        true
-      );
-      debriefReport = {
-        stageId: state.activeStageId,
-        stageTitle: state.stageConfig.title,
-        success: true,
-        score: debriefMath.score,
-        survivedSols: state.stageConfig.sol,
-        finalBatteryPercent: nextState.batteryPercent,
-        finalOxygenPercent: nextState.oxygenPercent,
-        finalTemperatureCelsius: nextState.temperatureCelsius,
-        tradeOffSummary: debriefMath.tradeOffSummary,
-        educationalTakeaway: debriefMath.educationalTakeaway
-      };
-      missionService.submitStageResult(debriefReport);
-    } else if (isGameOver) {
-      soundEngine.playFailureTone();
-      soundEngine.stopPowerHum();
-      const debriefMath = calculateDebriefReport(
-        state.activeStageId,
-        state.stageConfig.title,
-        nextState,
-        state.stageConfig.sol,
-        false,
-        failureReason || undefined
-      );
-      debriefReport = {
-        stageId: state.activeStageId,
-        stageTitle: state.stageConfig.title,
-        success: false,
-        score: debriefMath.score,
-        survivedSols: state.stageConfig.sol,
-        finalBatteryPercent: nextState.batteryPercent,
-        finalOxygenPercent: nextState.oxygenPercent,
-        finalTemperatureCelsius: nextState.temperatureCelsius,
-        tradeOffSummary: debriefMath.tradeOffSummary,
-        educationalTakeaway: debriefMath.educationalTakeaway,
-        failureReason: failureReason || undefined
-      };
-      missionService.submitStageResult(debriefReport);
-    }
-
-    // Update store state
-    set({
-      solTime: nextSolTime % stageDuration,
-      solPhase: nextPhase,
-      battery: nextState.batteryPercent,
-      batteryKwh: nextState.batteryKwh,
-      batteryCapacityKwh: nextState.batteryCapacityKwh,
-      oxygen: nextState.oxygenPercent,
-      temperature: nextState.temperatureCelsius,
-      solarIntake: nextState.solarKw,
-      dustCoverage: nextState.dustCoverage,
-      netPower: nextState.netPowerKw,
-      activeEvents: updatedEvents,
-      activeWarnings: warnings,
-      isGameOver,
-      isVictory,
-      failureReason,
-      debriefReport
-    });
   },
 
   // Backwards compatibility alias
   tickTelemetry: (delta: number) => {
     get().tick(delta);
   }
-}));
+  };
+});
 
 if (typeof window !== 'undefined') {
   (window as unknown as { __outpostStore: typeof useOutpostStore }).__outpostStore = useOutpostStore;

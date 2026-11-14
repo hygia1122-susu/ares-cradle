@@ -12,6 +12,8 @@ import { useOutpostStore } from '@/modules/store/useOutpostStore';
 import LightingRig from './LightingRig';
 import MarsTerrain from './MarsTerrain';
 import OuterRegions from './OuterRegions';
+import ScientificElements from './ScientificElements';
+import ScientificInteractionPrompt from '@/modules/mission-control/ScientificInteractionPrompt';
 import HabitatDome from './HabitatDome';
 import HabitatInterior from './HabitatInterior';
 import SolarArray from './SolarArray';
@@ -153,6 +155,9 @@ export const MarsCanvas: React.FC = () => {
           powerPreference: 'high-performance'
         }}
         onCreated={({ gl, scene }) => {
+          // Keep browser gestures on the canvas so touch drags can drive the camera.
+          gl.domElement.style.touchAction = 'none';
+          gl.domElement.style.overscrollBehavior = 'none';
           // Strict memory hygiene: clamp pixel ratio and clean clear color
           gl.setPixelRatio(Math.min(window.devicePixelRatio, graphicsQuality === 'low' ? 1 : 2));
           gl.setClearColor(new THREE.Color('#0B0E14'));
@@ -174,6 +179,7 @@ export const MarsCanvas: React.FC = () => {
         {/* Mars Surface, Craters, Foundation & Mineral Rocks */}
         <MarsTerrain />
         <OuterRegions />
+        <ScientificElements />
 
         {/* Pressurized Habitat with Reactive Bioluminescent Core */}
         <HabitatDome />
@@ -223,6 +229,7 @@ export const MarsCanvas: React.FC = () => {
           />
         )}
       </Canvas>
+      <ScientificInteractionPrompt />
     </div>
   );
 };

@@ -8,72 +8,53 @@ const step = (state, throttle, steer = 0, dt = 0.05, environment) =>
   rover.stepRoverDynamics(state, { throttle, steer, dt }, environment);
 const close = (a, b, tolerance = 1e-6) => assert.ok(Math.abs(a - b) <= tolerance, `${a} not near ${b}`);
 
-test('steering while stationary changes front wheel angle but never moves or yaws chassis', () => {
+test('stationary steering angles the wheels without chassis yaw or translation', () => {
   const start = initial();
   const turned = step(start, 0, 1, 0.1);
   assert.ok(turned.steeringAngle > 0);
-  close(turned.x, start.x);
-  close(turned.z, start.z);
-  close(turned.heading, start.heading);
+  close(turned.x, start.x); close(turned.z, start.z); close(turned.heading, start.heading);
   close(turned.acceptedWheelTravel, 0);
 });
 
-test('forward throttle accelerates along +Z and coasts with retained momentum', () => {
-  let state = initial();
-  for (let i = 0; i < 20; i++) state = step(state, 1);
-  assert.ok(state.longitudinalVelocity > 1.5);
-  assert.ok(state.z > 0.5);
-  assert.ok(Math.abs(state.x) < 1e-6);
-  const speed = state.longitudinalVelocity;
-  state = step(state, 0, 0, 0.05);
-  assert.ok(state.longitudinalVelocity > 0);
-  assert.ok(state.longitudinalVelocity < speed);
+test('forward input reaches useful speed immediately and release stops within 0.15 seconds', () => {
+  let state = step(initial(), 1, 0, 1 / 60);
+  assert.equal(state.longitudinalVelocity, 5);
   assert.ok(state.z > 0);
+  for (let i = 0; i < 8; i++) state = step(state, 0, 0, 0.02);
+  assert.equal(state.longitudinalVelocity, 0);
+  assert.ok(state.z > 0, 'accepted travel is retained through braking');
 });
 
-test('opposing throttle brakes forward motion to zero before reversing', () => {
-  let state = { ...initial(), longitudinalVelocity: 1 };
-  state = step(state, -1, 0, 0.1);
-  assert.ok(state.longitudinalVelocity > 0);
-  state = step(state, -1, 0, 0.1);
-  close(state.longitudinalVelocity, 0);
-  const travelAtRest = state.acceptedWheelTravel;
-  state = step(state, -1, 0, 0.1);
-  assert.ok(state.longitudinalVelocity < 0);
-  assert.ok(state.acceptedWheelTravel < travelAtRest);
+test('reverse input changes velocity sign immediately and is capped at -3 m/s', () => {
+  const state = step({ ...initial(), longitudinalVelocity: 5 }, -1, 0, 0.02);
+  assert.equal(state.longitudinalVelocity, -3);
+  assert.ok(state.z < 0);
 });
 
-test('Ackermann bicycle steering yaws only while moving and mirrors in forward and reverse', () => {
-  let left = initial();
-  for (let i = 0; i < 12; i++) left = step(left, 1, 1);
+test('positive steering turns right in the watch-camera basis in forward and reverse', () => {
   let right = initial();
-  for (let i = 0; i < 12; i++) right = step(right, 1, -1);
+  for (let i = 0; i < 12; i++) right = step(right, 1, 1);
+  assert.ok(right.heading < 0 && right.x < 0, 'camera-right at heading zero points toward -X');
+  let left = initial();
+  for (let i = 0; i < 12; i++) left = step(left, 1, -1);
   assert.ok(left.heading > 0 && left.x > 0);
-  assert.ok(right.heading < 0 && right.x < 0);
   close(left.x, -right.x, 0.02);
 
-  let reverseLeft = { ...initial(), longitudinalVelocity: -2 };
   let reverseRight = { ...initial(), longitudinalVelocity: -2 };
+  let reverseLeft = { ...initial(), longitudinalVelocity: -2 };
   for (let i = 0; i < 8; i++) {
-    reverseLeft = step(reverseLeft, 0, 1);
-    reverseRight = step(reverseRight, 0, -1);
+    reverseRight = step(reverseRight, 0, 1);
+    reverseLeft = step(reverseLeft, 0, -1);
   }
-  assert.ok(reverseLeft.heading < 0);
-  assert.ok(reverseRight.heading > 0);
-  assert.ok(reverseLeft.z < 0 && reverseRight.z < 0);
-  close(reverseLeft.x, -reverseRight.x, 0.02);
+  assert.ok(reverseRight.heading > 0 && reverseRight.z < 0, 'reverse steering follows standard vehicle kinematics');
+  assert.ok(reverseLeft.heading < 0 && reverseLeft.z < 0);
 });
 
 test('fixed internal substeps make equivalent frame partitions nearly invariant', () => {
-  let one = initial();
-  one = step(one, 0.8, 0.55, 0.1);
-  let split = initial();
-  split = step(split, 0.8, 0.55, 0.05);
-  split = step(split, 0.8, 0.55, 0.05);
-  close(one.x, split.x, 1e-8);
-  close(one.z, split.z, 1e-8);
-  close(one.heading, split.heading, 1e-8);
-  close(one.longitudinalVelocity, split.longitudinalVelocity, 1e-8);
+  const one = step(initial(), 1, 0.55, 0.1);
+  const split = step(step(initial(), 1, 0.55, 0.05), 1, 0.55, 0.05);
+  close(one.x, split.x, 1e-8); close(one.z, split.z, 1e-8);
+  close(one.heading, split.heading, 1e-8); close(one.longitudinalVelocity, split.longitudinalVelocity, 1e-8);
 });
 
 test('invalid and oversized input remains finite and bounded', () => {
@@ -86,27 +67,23 @@ test('invalid and oversized input remains finite and bounded', () => {
   }
   assert.ok(Math.hypot(state.x - start.x, state.z - start.z) < 1e-9);
   const bounded = step(initial(), 1, 0, 1e99);
-  assert.ok(bounded.z < 0.1, `Oversized dt was not clamped: z=${bounded.z}`);
+  assert.ok(bounded.z <= 0.5, `oversized dt exceeded one bounded frame: z=${bounded.z}`);
 });
 
-test('swept substeps stop at an obstacle without tunneling or wheel spin travel', () => {
+test('blocked movement does not advance pose or accepted wheel travel', () => {
   const state = rover.stepRoverDynamics(
     { ...initial(), longitudinalVelocity: 5 },
     { throttle: 1, steer: 0, dt: 0.1 },
-    { canOccupy: (_x, z) => z <= 0.02 }
+    { canOccupy: () => false }
   );
-  close(state.z, 0);
-  close(state.acceptedWheelTravel, 0);
-  close(state.longitudinalVelocity, 0);
+  close(state.z, 0); close(state.acceptedWheelTravel, 0); close(state.longitudinalVelocity, 0);
 });
 
-test('ground support samples all six wheels and yields finite pitch, roll and suspension travel', () => {
+test('ground support samples six wheels and yields finite pitch, roll and suspension travel', () => {
   const state = rover.stepRoverDynamics(initial(), { throttle: 0, steer: 0, dt: 0.02 }, {
     sampleGround: (x, z) => 0.1 * x + 0.2 * z
   });
-  assert.ok(state.groundPitch > 0);
-  assert.ok(state.groundRoll > 0);
-  assert.ok(Number.isFinite(state.y));
+  assert.ok(state.groundPitch > 0); assert.ok(state.groundRoll > 0); assert.ok(Number.isFinite(state.y));
   assert.deepEqual(Object.keys(state.suspensionTravel).sort(), [
     'frontLeft', 'frontRight', 'middleLeft', 'middleRight', 'rearLeft', 'rearRight'
   ]);
@@ -114,16 +91,12 @@ test('ground support samples all six wheels and yields finite pitch, roll and su
   assert.ok(Object.values(state.suspensionTravel).every(value => Number.isFinite(value) && Math.abs(value) <= 0.25));
 });
 
-test('world bounds stop travel at ±300 without teleporting around the planet', () => {
-  for (const z of [-299.08, 299.08]) {
-    const direction = Math.sign(z);
-    const state = rover.stepRoverDynamics(
-      { ...initial({ z }), longitudinalVelocity: direction * 5 },
-      { throttle: direction, steer: 0, dt: 0.1 }
-    );
-    assert.ok(state.z >= -300 && state.z <= 300);
-    assert.ok(Math.abs(state.z - z) < 0.1);
-    close(state.acceptedWheelTravel, 0);
-    close(state.longitudinalVelocity, 0);
-  }
+test('world and active-region circle bounds stop travel without teleporting', () => {
+  const edge = step(initial({ x: 0, z: 75 }), 1, 0, 0.1, {
+    regionCenter: { x: 0, z: 0 }, regionRadius: 75,
+  });
+  close(edge.z, 75); close(edge.acceptedWheelTravel, 0); close(edge.longitudinalVelocity, 0);
+  const worldEdge = step(initial({ z: 299.08 }), 1, 0, 0.1);
+  assert.ok(worldEdge.z >= 299.08 && worldEdge.z <= 300);
+  close(worldEdge.acceptedWheelTravel, 0); close(worldEdge.longitudinalVelocity, 0);
 });

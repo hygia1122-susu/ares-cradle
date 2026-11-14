@@ -6,6 +6,7 @@ import { soundEngine } from '@/modules/audio/soundEngine';
 
 export const CockpitDrivingDeck: React.FC = () => {
   const isDrivingRover = useOutpostStore((state) => state.isDrivingRover);
+  const roverSpeed = useOutpostStore((state) => state.roverSpeed);
   const toggleDrivingRover = useOutpostStore((state) => state.toggleDrivingRover);
   const roverHeadlightMode = useOutpostStore((state) => state.roverHeadlightMode);
   const toggleRoverHeadlightMode = useOutpostStore((state) => state.toggleRoverHeadlightMode);
@@ -15,6 +16,7 @@ export const CockpitDrivingDeck: React.FC = () => {
   if (!isDrivingRover) return null;
 
   const triggerUTurn = () => {
+    if (!Number.isFinite(roverSpeed) || roverSpeed <= 0.3) return;
     soundEngine.playClick(1400);
     window.dispatchEvent(new CustomEvent('rover:uturn'));
   };
@@ -55,27 +57,28 @@ export const CockpitDrivingDeck: React.FC = () => {
           <Gauge className="w-4 h-4 text-cyan-400" />
           <div className="text-left leading-none">
             <span className="text-[9px] text-slate-400 block font-sans">SPEED</span>
-            <span className="font-bold text-xs">27 KM/H</span>
+            <span className="font-bold text-xs">{Number.isFinite(roverSpeed) ? Math.abs(roverSpeed * 3.6).toFixed(1) : '0.0'} KM/H{roverSpeed < -0.01 ? ' R' : ''}</span>
           </div>
         </div>
 
         {/* Desktop Keyboard Hint (Hidden on Mobile/Touch) */}
         <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 text-[11px]">
-          <kbd className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-700 text-cyan-300 font-bold text-[10px]">WASD</kbd>
-          <span>Drive</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-700 text-cyan-300 font-bold text-[10px]">W / S</kbd>
+          <span>Accelerate / reverse</span>
           <span className="text-slate-600">·</span>
-          <kbd className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-700 text-amber-300 font-bold text-[10px]">SPACE</kbd>
-          <span>Jump</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-700 text-amber-300 font-bold text-[10px]">R</kbd>
+          <span>Exit</span>
         </div>
 
         {/* 180° U-Turn Button */}
         <button
           onClick={triggerUTurn}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shadow-[0_0_12px_rgba(245,158,11,0.4)] transition-all active:scale-95 cursor-pointer"
-          title="Smooth 180° In-Place U-Turn"
+          disabled={!Number.isFinite(roverSpeed) || roverSpeed <= 0.3}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shadow-[0_0_12px_rgba(245,158,11,0.4)] transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+          title="While rolling forward, hold accelerator for a curved U-turn"
         >
           <RotateCcw className="w-4 h-4" />
-          <span className="tracking-wider">U-TURN 180°</span>
+          <span className="tracking-wider">CURVED U-TURN</span>
         </button>
 
         {/* Dual Headlight Switch */}
@@ -98,6 +101,7 @@ export const CockpitDrivingDeck: React.FC = () => {
             onPointerDown={() => handleNavStart('left')}
             onPointerUp={handleNavEnd}
             onPointerLeave={handleNavEnd}
+            onPointerCancel={handleNavEnd}
             className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 active:bg-cyan-500 active:text-black cursor-pointer"
             title="Steer Left"
           >
@@ -107,6 +111,7 @@ export const CockpitDrivingDeck: React.FC = () => {
             onPointerDown={() => handleNavStart('forward')}
             onPointerUp={handleNavEnd}
             onPointerLeave={handleNavEnd}
+            onPointerCancel={handleNavEnd}
             className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 active:bg-cyan-500 active:text-black cursor-pointer"
             title="Accelerate Forward"
           >
@@ -116,6 +121,7 @@ export const CockpitDrivingDeck: React.FC = () => {
             onPointerDown={() => handleNavStart('backward')}
             onPointerUp={handleNavEnd}
             onPointerLeave={handleNavEnd}
+            onPointerCancel={handleNavEnd}
             className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 active:bg-cyan-500 active:text-black cursor-pointer"
             title="Reverse"
           >
@@ -125,6 +131,7 @@ export const CockpitDrivingDeck: React.FC = () => {
             onPointerDown={() => handleNavStart('right')}
             onPointerUp={handleNavEnd}
             onPointerLeave={handleNavEnd}
+            onPointerCancel={handleNavEnd}
             className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 active:bg-cyan-500 active:text-black cursor-pointer"
             title="Steer Right"
           >

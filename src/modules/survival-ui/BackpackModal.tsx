@@ -21,6 +21,7 @@ import {
   ItemStatusBadge
 } from './itemRegistry';
 import AerospaceItemIcon from './AerospaceItemIcon';
+import BackpackSurvivalShelf from '@/modules/mission-control/BackpackSurvivalShelf';
 
 const modalSpring = {
   type: 'spring' as const,
@@ -32,7 +33,6 @@ type StorageTab = 'personal' | 'rover' | 'blueprints';
 
 export const BackpackModal: React.FC = () => {
   const isBackpackOpen = useOutpostStore((state) => state.isBackpackOpen);
-  const toggleBackpack = useOutpostStore((state) => state.toggleBackpack);
   const closeBackpack = useOutpostStore((state) => state.closeBackpack);
   const inventory = useOutpostStore((state) => state.inventory);
   const roverInventory = useOutpostStore((state) => state.roverInventory);
@@ -85,26 +85,41 @@ export const BackpackModal: React.FC = () => {
     }
   }, [isBackpackOpen]);
 
-  // Global [E] / [I] key toggle & [Escape] top-layer close listener
+  // Own the global [E] / [I] toggle and close only this modal on [Escape].
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+      if (e.repeat) return;
 
-      // Ignore Shift+E or Ctrl+E so modifier combinations never conflict
-      if ((e.key === 'e' || e.key === 'E' || e.key === 'i' || e.key === 'I') && !e.shiftKey && !e.ctrlKey && !e.altKey) {
-        e.preventDefault();
-        toggleBackpack();
-      } else if (e.key === 'Escape' && isBackpackOpen) {
+      const state = useOutpostStore.getState();
+      if (e.key === 'Escape') {
+        if (!state.isBackpackOpen) return;
         e.preventDefault();
         e.stopPropagation();
-        closeBackpack();
+        state.closeBackpack();
+        return;
       }
+
+      if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+      const key = e.key.toLowerCase();
+      if (key !== 'e' && key !== 'i') return;
+
+      const target = e.target as HTMLElement | null;
+      if (target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable)) return;
+
+      const otherDialogOpen = Array.from(document.querySelectorAll('[role="dialog"]')).some(
+        (dialog) => dialog.getAttribute('aria-labelledby') !== 'backpack-modal-title'
+      );
+      if (!state.isBackpackOpen && (otherDialogOpen || state.isManualOpen || state.activeScienceEntryId)) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      if (state.isBackpackOpen) state.closeBackpack();
+      else state.openBackpack();
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleBackpack, closeBackpack, isBackpackOpen]);
+  }, []);
 
   // Compute semantic status badge for any catalog item
   const getItemStatusBadge = (itemId: string): {
@@ -325,7 +340,9 @@ export const BackpackModal: React.FC = () => {
             {/* ========================================================
                 2. MAIN BODY: Left Grid + Vials | Right Inspector Console
                 ======================================================== */}
-            <div className="flex-1 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-4 p-4">
+            <div className="flex-1 overflow-y-auto p-4">
+              <BackpackSurvivalShelf />
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
               {/* LEFT COLUMN (7 cols): Storage Tabs, 12-Slot Grid, 3-Vial Specimen Rack & Quickbar */}
               <div className="lg:col-span-7 flex flex-col gap-3.5">
                 {/* Storage Location Tabs */}
@@ -789,6 +806,7 @@ export const BackpackModal: React.FC = () => {
                     </div>
                   )}
                 </div>
+              </div>
               </div>
             </div>
 

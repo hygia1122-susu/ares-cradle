@@ -1,368 +1,52 @@
-import React, { useRef, useState, useEffect, useMemo } from 'react';
+import React, { useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useOutpostStore } from '@/modules/store/useOutpostStore';
-import { soundEngine } from '@/modules/audio/soundEngine';
-import {
-  PHYSICS_CONSTANTS,
-  PhysicsState,
-  STATIC_WORLD_COLLIDERS,
-  stepPlayerPhysics
-} from '@/modules/character/physicsEngine';
+import { PlayableWatchRover } from './PlayableWatchRover';
 
 const MAX_TRACKS = 64;
 
-/**
- * Authentic NASA Perseverance/Curiosity Planetary Exploration Rover
- * - 6-Wheel Rocker-Bogie differential suspension with cleated titanium wheels
- * - Mastcam-Z tall camera neck with dual optical stereo lenses & SuperCam laser
- * - Articulated sample acquisition robotic arm with coring drill turret
- * - Rear MMRTG (Multi-Mission Radioisotope Thermoelectric Generator) power source
- * - Dual forward LED searchlights casting illumination cones onto Martian regolith
- * - Smooth planetary driving with forward, reverse gear, and zero-turn 360° on-the-spot rotation
- * - Planetary circumnavigation: wrap-around at 120m exploration perimeter
- */
-export const MarsRover: React.FC = () => {
-  const groupRef = useRef<THREE.Group>(null);
+/** Static original rover exhibit; the playable rover is mounted separately. */
+const PreservedRoverVisual: React.FC = () => {
+  const isDrivingRover = false;
+  const roverPos: [number, number, number] = [3.8, -0.32, -2.2];
+  const heading = useRef(0);
   const mastHeadRef = useRef<THREE.Group>(null);
   const dishRef = useRef<THREE.Group>(null);
   const armRef = useRef<THREE.Group>(null);
   const wheelsRef = useRef<THREE.Group[]>([]);
   const dustParticlesRef = useRef<THREE.Points>(null);
+  const dustPositions = useRef(new Float32Array(45 * 3));
   const trackMeshRef = useRef<THREE.InstancedMesh>(null);
-  const trackDummy = useMemo(() => new THREE.Object3D(), []);
-  const tracksData = useRef<{ x: number; y: number; z: number; rot: number; life: number }[]>([]);
-  const lastTrackPos = useRef<[number, number]>([0, 0]);
   const [hovered, setHovered] = useState(false);
-
-  const isDrivingRover = useOutpostStore((state) => state.isDrivingRover);
-  const toggleDrivingRover = useOutpostStore((state) => state.toggleDrivingRover);
-  const roverPos = useOutpostStore((state) => state.roverPos);
   const roverHeadlightMode = useOutpostStore((state) => state.roverHeadlightMode);
   const roverUpgradeLevel = useOutpostStore((state) => state.roverUpgradeLevel);
-  const setRoverPos = useOutpostStore((state) => state.setRoverPos);
-  const setPlayerPos = useOutpostStore((state) => state.setPlayerPos);
-  const joystickVector = useOutpostStore((state) => state.joystickVector);
-  const isMouseDriving = useOutpostStore((state) => state.isMouseDriving);
-
-  // Local Object3D targets attached to Rover front so dual headlights steer with chassis
   const [leftHeadlightTarget] = useState(() => {
-    const obj = new THREE.Object3D();
-    obj.position.set(-0.38, -0.6, 14.0);
-    return obj;
+    const target = new THREE.Object3D();
+    target.position.set(-0.38, -0.6, 14);
+    return target;
   });
   const [rightHeadlightTarget] = useState(() => {
-    const obj = new THREE.Object3D();
-    obj.position.set(0.38, -0.6, 14.0);
-    return obj;
+    const target = new THREE.Object3D();
+    target.position.set(0.38, -0.6, 14);
+    return target;
   });
 
-  const keysPressed = useRef<Record<string, boolean>>({});
-  const heading = useRef(0.0); // 0 radians points towards +Z
-  const currentSpeed = useRef(0);
-  const roverJumpQueued = useRef(false);
-  const roverPhysicsRef = useRef<PhysicsState>({
-    x: roverPos[0],
-    y: -0.32,
-    z: roverPos[2],
-    vy: 0,
-    isGrounded: true,
-    isBlocked: false,
-    blockedByLabel: null,
-    blockedObstacleJumpable: false,
-    standingOnLabel: null
-  });
-
-  // Keyboard controls & U-Turn event for rover
-  useEffect(() => {
-    const isModalBlocking = () => {
-      const o = useOutpostStore.getState();
-      if (o.isBackpackOpen || o.isClassroomOpen || o.isBrownoutQuizOpen || o.isVictory || o.isGameOver) {
-        return true;
-      }
-      return Boolean(document.querySelector('[role="dialog"]'));
-    };
-
-    const handleUTurn = () => {
-      if (isModalBlocking()) return;
-      heading.current += Math.PI;
-    };
-    window.addEventListener('rover:uturn', handleUTurn);
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName) ||
-          target.closest('[role="dialog"]'))
-      ) {
-        return;
-      }
-      if (isModalBlocking()) {
-        keysPressed.current = {};
-        return;
-      }
-      if (e.code === 'Space' && isDrivingRover) {
-        e.preventDefault();
-        if (!keysPressed.current['Space']) {
-          roverJumpQueued.current = true;
-        }
-      }
-      keysPressed.current[e.code] = true;
-
-      if (e.code === 'KeyR' && !e.repeat) {
-        toggleDrivingRover();
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      keysPressed.current[e.code] = false;
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('rover:uturn', handleUTurn);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [toggleDrivingRover, isDrivingRover]);
-
-  // Dust Particle Buffer
-  const dustCount = 45;
-  const dustPositions = useRef(new Float32Array(dustCount * 3));
-  const dustLifetimes = useRef(new Float32Array(dustCount));
-
-  useEffect(() => {
-    for (let i = 0; i < dustCount; i++) {
-      dustPositions.current[i * 3 + 1] = -100; // hide initially
-      dustLifetimes.current[i] = 1.0;
-    }
-  }, []);
-
-  useFrame((state, delta) => {
+  useFrame((state) => {
     const t = state.clock.getElapsedTime();
-    const safeDelta = Math.min(delta, 0.1);
-
-    // Mastcam gentle autonomous scan
     if (mastHeadRef.current) {
       mastHeadRef.current.rotation.y = Math.sin(t * 0.8) * 0.45;
       mastHeadRef.current.rotation.x = Math.sin(t * 0.4) * 0.08 - 0.05;
     }
-
-    // High gain antenna tracking
-    if (dishRef.current) {
-      dishRef.current.rotation.y = Math.sin(t * 0.3) * 0.3 + 0.2;
-    }
-
-    // Robotic arm idle breathing
-    if (armRef.current) {
-      armRef.current.rotation.z = Math.sin(t * 1.2) * 0.03 - 0.2;
-    }
-
-    if (!groupRef.current) return;
-
-    const modalOpen =
-      useOutpostStore.getState().isBackpackOpen ||
-      Boolean(document.querySelector('[role="dialog"]'));
-    if (modalOpen) {
-      keysPressed.current = {};
-      roverJumpQueued.current = false;
-    }
-
-    if (isDrivingRover) {
-      let forwardInput = 0;
-      let steerInput = 0;
-
-      if (!modalOpen) {
-        if (keysPressed.current['KeyW'] || keysPressed.current['ArrowUp'] || isMouseDriving) {
-          forwardInput += 1;
-        }
-        if (keysPressed.current['KeyS'] || keysPressed.current['ArrowDown']) {
-          forwardInput -= 1;
-        }
-        if (keysPressed.current['KeyA'] || keysPressed.current['ArrowLeft']) {
-          steerInput += 1; // turn left
-        }
-        if (keysPressed.current['KeyD'] || keysPressed.current['ArrowRight']) {
-          steerInput -= 1; // turn right
-        }
-
-        // Add touch joystick input
-        forwardInput -= joystickVector.y;
-        steerInput -= joystickVector.x;
-      }
-
-      // Steering turn rate (supports zero-turn rotation in place)
-      const turnRate = forwardInput === 0 ? 2.6 : 1.9;
-      if (Math.abs(steerInput) > 0.04) {
-        heading.current += steerInput * turnRate * safeDelta;
-      }
-
-      // Acceleration & braking
-      const maxForwardSpeed = 7.5; // m/s
-      const maxReverseSpeed = -3.8; // m/s
-      const targetSpeed = forwardInput > 0 
-        ? forwardInput * maxForwardSpeed 
-        : forwardInput < 0 
-        ? forwardInput * Math.abs(maxReverseSpeed) 
-        : 0;
-
-      const accelRate = forwardInput !== 0 ? 4.5 : 6.0;
-      currentSpeed.current = THREE.MathUtils.lerp(currentSpeed.current, targetSpeed, safeDelta * accelRate);
-
-      // Rover front faces +Z in local space:
-      // In world coordinates with rotation.y = heading:
-      // Forward vector is (sin(heading), 0, cos(heading))
-      const velX = Math.sin(heading.current) * currentSpeed.current;
-      const velZ = Math.cos(heading.current) * currentSpeed.current;
-
-      roverPhysicsRef.current.x = groupRef.current.position.x;
-      roverPhysicsRef.current.z = groupRef.current.position.z;
-
-      const wantJump = roverJumpQueued.current;
-      roverJumpQueued.current = false;
-
-      const nextRoverPhys = stepPlayerPhysics(
-        roverPhysicsRef.current,
-        {
-          moveX: velX,
-          moveZ: velZ,
-          jumpJustPressed: wantJump,
-          dt: safeDelta
-        },
-        STATIC_WORLD_COLLIDERS,
-        PHYSICS_CONSTANTS.ROVER_RADIUS
-      );
-
-      if (roverPhysicsRef.current.isGrounded && !nextRoverPhys.isGrounded && nextRoverPhys.vy > 0) {
-        soundEngine.playJump();
-      }
-      if (nextRoverPhys.isBlocked && Math.abs(currentSpeed.current) > 0.5) {
-        currentSpeed.current *= 0.35;
-      }
-
-      roverPhysicsRef.current = nextRoverPhys;
-
-      const newX = nextRoverPhys.x;
-      const newZ = nextRoverPhys.z;
-      const newY = Math.max(-0.32, nextRoverPhys.y + 0.08);
-
-      groupRef.current.position.x = newX;
-      groupRef.current.position.z = newZ;
-      groupRef.current.position.y = newY;
-      groupRef.current.rotation.y = heading.current;
-
-      // Update store positions so Cadet Leo & camera follow the rover
-      setRoverPos([newX, newY, newZ]);
-      setPlayerPos([newX, newY, newZ]);
-
-      // Wheel spin animations
-      // If moving forward/backward: spin based on speed
-      // If turning in place: differential counter-spin!
-      const forwardWheelSpeed = currentSpeed.current * safeDelta * 4.5;
-      const turnWheelSpeed = steerInput * safeDelta * 2.5;
-
-      wheelsRef.current.forEach((wheelGroup, idx) => {
-        if (!wheelGroup) return;
-        const isLeftWheel = idx % 2 === 0;
-        const spin = forwardWheelSpeed + (isLeftWheel ? turnWheelSpeed : -turnWheelSpeed);
-        wheelGroup.rotation.x += spin;
-      });
-
-      // Update Martian Tire Tracks stamps
-      const distFromLastTrack = Math.hypot(newX - lastTrackPos.current[0], newZ - lastTrackPos.current[1]);
-      if (distFromLastTrack > 0.45 && Math.abs(currentSpeed.current) > 0.4) {
-        lastTrackPos.current = [newX, newZ];
-        const cosH = Math.cos(heading.current);
-        const sinH = Math.sin(heading.current);
-
-        // Left wheel imprint
-        tracksData.current.push({
-          x: newX - cosH * 0.68,
-          y: -0.375,
-          z: newZ + sinH * 0.68,
-          rot: heading.current,
-          life: 1.0
-        });
-        // Right wheel imprint
-        tracksData.current.push({
-          x: newX + cosH * 0.68,
-          y: -0.375,
-          z: newZ - sinH * 0.68,
-          rot: heading.current,
-          life: 1.0
-        });
-
-        if (tracksData.current.length > MAX_TRACKS) {
-          tracksData.current.splice(0, tracksData.current.length - MAX_TRACKS);
-        }
-      }
-
-      // Dust kick-up effect behind rear wheels
-      if (Math.abs(currentSpeed.current) > 1.2 && dustParticlesRef.current) {
-        const geo = dustParticlesRef.current.geometry;
-        const pos = geo.attributes.position.array as Float32Array;
-
-        for (let i = 0; i < dustCount; i++) {
-          dustLifetimes.current[i] += safeDelta * 2.0;
-          if (dustLifetimes.current[i] > 1.0) {
-            dustLifetimes.current[i] = Math.random() * 0.3;
-            // Spawn at rear wheels (-Z)
-            const side = Math.random() > 0.5 ? 0.6 : -0.6;
-            pos[i * 3] = (Math.random() - 0.5) * 0.3 + side;
-            pos[i * 3 + 1] = 0.08 + Math.random() * 0.1;
-            pos[i * 3 + 2] = -0.85 - Math.random() * 0.3;
-          } else {
-            // Billow upward and backward
-            pos[i * 3 + 1] += safeDelta * 0.4;
-            pos[i * 3 + 2] -= safeDelta * (currentSpeed.current * 0.3);
-          }
-        }
-        geo.attributes.position.needsUpdate = true;
-      }
-    } else {
-      // Parked mode at store position
-      groupRef.current.position.x = roverPos[0];
-      groupRef.current.position.y = roverPos[1];
-      groupRef.current.position.z = roverPos[2];
-    }
-
-    // Update Instanced Martian Tire Tracks Buffer
-    if (trackMeshRef.current) {
-      for (let i = 0; i < MAX_TRACKS; i++) {
-        const item = tracksData.current[i];
-        if (item && item.life > 0.05) {
-          item.life -= safeDelta * 0.035; // Fades smoothly over ~30s
-          trackDummy.position.set(item.x, item.y, item.z);
-          trackDummy.rotation.set(-Math.PI / 2, 0, item.rot);
-          trackDummy.scale.set(1, item.life, 1);
-          trackDummy.updateMatrix();
-          trackMeshRef.current.setMatrixAt(i, trackDummy.matrix);
-        } else {
-          trackDummy.position.set(0, -100, 0);
-          trackDummy.updateMatrix();
-          trackMeshRef.current.setMatrixAt(i, trackDummy.matrix);
-        }
-      }
-      trackMeshRef.current.instanceMatrix.needsUpdate = true;
-    }
+    if (dishRef.current) dishRef.current.rotation.y = Math.sin(t * 0.3) * 0.3 + 0.2;
+    if (armRef.current) armRef.current.rotation.z = Math.sin(t * 1.2) * 0.03 - 0.2;
   });
 
-  const handleRoverClick = (e: any) => {
-    e.stopPropagation();
-    soundEngine.playClick(1400);
-    toggleDrivingRover();
-  };
+  const handleRoverClick = (event: { stopPropagation: () => void }) => event.stopPropagation();
 
   return (
     <>
-      {/* Dynamic Martian Tire Tracks (Persistent Chevron Tread Marks) */}
-      <instancedMesh
-        ref={trackMeshRef}
-        args={[undefined, undefined, MAX_TRACKS]}
-        frustumCulled={false}
-      >
+      <instancedMesh ref={trackMeshRef} args={[undefined, undefined, MAX_TRACKS]} visible={false}>
         <planeGeometry args={[0.24, 0.44]} />
         <meshStandardMaterial
           color="#3B1204"
@@ -373,24 +57,21 @@ export const MarsRover: React.FC = () => {
           depthWrite={false}
         />
       </instancedMesh>
-
       <group
-        ref={groupRef}
+        name="preserved-original-rover"
         position={roverPos}
         rotation={[0, heading.current, 0]}
-        dispose={null}
         onClick={handleRoverClick}
-        onPointerOver={(e) => {
-          e.stopPropagation();
+        onPointerOver={(event) => {
+          event.stopPropagation();
           setHovered(true);
           document.body.style.cursor = 'pointer';
-      }}
-      onPointerOut={() => {
-        setHovered(false);
-        document.body.style.cursor = 'auto';
-      }}
-    >
-      {/* ========================================================
+        }}
+        onPointerOut={() => {
+          setHovered(false);
+          document.body.style.cursor = 'auto';
+        }}
+      >{/* ========================================================
           1. MAIN CHASSIS (Perseverance Aerogel WEB Body)
           ======================================================== */}
       {/* Primary Equipment Box */}
@@ -704,16 +385,23 @@ export const MarsRover: React.FC = () => {
         />
       </points>
 
-      {/* Driver Interaction Indicator Ring (Hovered State) */}
+            {/* Driver Interaction Indicator Ring (Hovered State) */}
       {hovered && !isDrivingRover && (
         <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[1.5, 1.7, 32]} />
           <meshBasicMaterial color="#00F0FF" transparent opacity={0.6} />
         </mesh>
       )}
-    </group>
+      </group>
     </>
   );
 };
+
+export const MarsRover: React.FC = () => (
+  <>
+    <PlayableWatchRover />
+    <PreservedRoverVisual />
+  </>
+);
 
 export default MarsRover;

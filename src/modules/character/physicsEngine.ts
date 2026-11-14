@@ -9,7 +9,53 @@
  * - Vertical clearance & platform top landing (jump over or onto obstacles with [Space])
  */
 
-import { ADDITIVE_OUTER_COLLIDERS, WORLD_BOUNDS, sampleWorldGround } from '../outpost-3d/worldRegions';
+import {
+  ADDITIVE_OUTER_COLLIDERS,
+  OUTER_HERO_LANDMARKS,
+  OUTER_HERO_ROCKS,
+  WORLD_BOUNDS,
+  WORLD_REGIONS,
+  getOuterHeroVerticalPlacement,
+  sampleWorldGround,
+} from '../outpost-3d/worldRegions';
+
+const PARKED_ROVER_COLLIDER_RADIUS = 1.55;
+const PARKED_ROVER_COLLIDER_TOP_OFFSET = 1.6;
+
+/** The renderer uses a unit dodecahedron, whose vertices fit within its circumradius. */
+export function buildOuterPhysicsAdapter(): ObstacleCollider[] {
+  return OUTER_HERO_LANDMARKS.flatMap((landmark) => {
+    const groundY = sampleWorldGround(landmark.position.x, landmark.position.z);
+    const hero = {
+      id: `outer-hero-${landmark.id}`,
+      label: `${landmark.regionId} ${landmark.id}`,
+      type: 'box' as const,
+      x: landmark.position.x,
+      z: landmark.position.z,
+      halfX: landmark.halfX,
+      halfZ: landmark.halfZ,
+      rotationY: -landmark.yaw,
+      topY: getOuterHeroVerticalPlacement(landmark, groundY).topY,
+      jumpable: true,
+    };
+    const rocks = OUTER_HERO_ROCKS[landmark.id].map(([x, y, z, sx, sy, sz], index) => {
+      const cos = Math.cos(landmark.yaw);
+      const sin = Math.sin(landmark.yaw);
+      const localY = y + sy * 0.43;
+      return {
+        id: `outer-hero-${landmark.id}-rock-${index + 1}`,
+        label: `${landmark.regionId} ${landmark.id} rock ${index + 1}`,
+        type: 'circle' as const,
+        x: landmark.position.x + cos * x + sin * z,
+        z: landmark.position.z - sin * x + cos * z,
+        radius: Math.max(sx, sy, sz),
+        topY: groundY + localY + Math.max(sx, sy, sz),
+        jumpable: true,
+      };
+    });
+    return [hero, ...rocks];
+  });
+}
 
 export const PHYSICS_CONSTANTS = {
   GROUND_Y: -0.4,
@@ -436,6 +482,29 @@ export const STATIC_WORLD_COLLIDERS: ObstacleCollider[] = [
     radius: collider.radius,
     topY: sampleWorldGround(collider.x, collider.z) + 3.4,
     jumpable: false
+  })),
+  // The authored legacy rover remains parked at this original scene location.
+  {
+    id: 'legacy-mars-rover-exhibit',
+    label: 'Mars Exploration Rover Exhibit',
+    type: 'circle',
+    x: 3.8,
+    z: -2.2,
+    radius: 0.95,
+    topY: 0.38,
+    jumpable: true
+  },
+  ...buildOuterPhysicsAdapter(),
+  ...WORLD_REGIONS.map((region) => ({
+    id: `${region.id}-base-console`,
+    label: `${region.name} Console`,
+    type: 'box' as const,
+    x: region.baseConsole.x,
+    z: region.baseConsole.z,
+    halfX: 0.96,
+    halfZ: 0.96,
+    topY: sampleWorldGround(region.baseConsole.x, region.baseConsole.z) + 1.72,
+    jumpable: true
   }))
 ];
 
@@ -457,8 +526,8 @@ export function buildWorldColliders(
       type: 'circle',
       x: roverPos[0],
       z: roverPos[2],
-      radius: 0.95,
-      topY: 0.38,
+      radius: PARKED_ROVER_COLLIDER_RADIUS,
+      topY: roverPos[1] + PARKED_ROVER_COLLIDER_TOP_OFFSET,
       jumpable: true
     }
   ];

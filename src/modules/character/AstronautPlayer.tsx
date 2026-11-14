@@ -71,6 +71,9 @@ export const AstronautPlayer: React.FC = () => {
   const toggleFlashlight = useOutpostStore((state) => state.toggleFlashlight);
   const jumpRequestCount = useOutpostStore((state) => state.jumpRequestCount);
   const sprintInputActive = useOutpostStore((state) => state.sprintInputActive);
+  const survivalSuppliesAvailable = useOutpostStore((state) =>
+    state.exploration.survival.air > 0 && state.exploration.survival.meals > 0 && state.exploration.survival.energyEU > 0
+  );
   const setPhysicsStatus = useOutpostStore((state) => state.setPhysicsStatus);
 
   // Local Object3D target attached to torch hierarchy so the beam always points forward
@@ -103,6 +106,10 @@ export const AstronautPlayer: React.FC = () => {
   useEffect(() => {
     if (jumpRequestCount > lastHandledJumpCount.current) {
       lastHandledJumpCount.current = jumpRequestCount;
+      if (useOutpostStore.getState().isDrivingRover) {
+        jumpQueued.current = false;
+        return;
+      }
       jumpQueued.current = true;
     }
   }, [jumpRequestCount]);
@@ -119,9 +126,17 @@ export const AstronautPlayer: React.FC = () => {
     return false;
   };
 
-  // Keyboard Event Listeners for WASD, Arrow Keys, [Space] Jump/Double-Jump, [Shift] Sprint, and [F] Flashlight
+  // Keyboard Event Listeners for WASD, Arrow Keys, [Space] Jump/Double-Jump, [Shift] Sprint, and [L] Flashlight
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const liveStoreState = useOutpostStore.getState();
+      if (liveStoreState.isDrivingRover) {
+        keysPressed.current = {};
+        jumpQueued.current = false;
+        lastHandledJumpCount.current = liveStoreState.jumpRequestCount;
+        return;
+      }
+
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
       if (tag && ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
@@ -150,7 +165,7 @@ export const AstronautPlayer: React.FC = () => {
 
       keysPressed.current[e.code] = true;
 
-      if (e.code === 'KeyF' && !e.repeat) {
+      if (e.code === 'KeyL' && !e.repeat) {
         toggleFlashlight();
       }
     };
@@ -187,10 +202,13 @@ export const AstronautPlayer: React.FC = () => {
     if (!groupRef.current) return;
 
     if (isDrivingRover) {
-      groupRef.current.visible = false;
+      keysPressed.current = {};
+      jumpQueued.current = false;
+      lastHandledJumpCount.current = useOutpostStore.getState().jumpRequestCount;
+      groupRef.current.visible = true;
       return;
     }
-    groupRef.current.visible = true;
+    groupRef.current.visible = false;
 
     const safeDelta = Math.min(delta, PHYSICS_CONSTANTS.MAX_DT);
 
@@ -243,7 +261,7 @@ export const AstronautPlayer: React.FC = () => {
       !!keysPressed.current['ShiftLeft'] ||
       !!keysPressed.current['ShiftRight'] ||
       sprintInputActive;
-    const canSprint = shiftHeld && isMoving && thrusterEnergyRef.current > 4;
+    const canSprint = shiftHeld && isMoving && thrusterEnergyRef.current > 4 && survivalSuppliesAvailable;
 
     if (canSprint) {
       thrusterEnergyRef.current = Math.max(0, thrusterEnergyRef.current - 22 * safeDelta);

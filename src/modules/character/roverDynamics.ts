@@ -1,4 +1,4 @@
-/** Small, deterministic ground-vehicle model. Heading 0 faces +Z; positive steering turns toward +X. */
+/** Deterministic ground-vehicle model. Heading 0 faces +Z; positive steering means screen-right. */
 export interface RoverPose {
   x: number;
   y: number;
@@ -13,7 +13,7 @@ export interface RoverSuspensionTravel {
 export interface RoverState extends RoverPose {
   longitudinalVelocity: number;
   lateralVelocity: number;
-  /** Front-wheel angle in radians; positive turns toward +X at heading 0. */
+  /** Front-wheel angle in radians; positive steering is right relative to the watch camera. */
   steeringAngle: number;
   /** Cumulative signed forward wheel distance accepted by collision/bounds checks. */
   acceptedWheelTravel: number;
@@ -24,6 +24,7 @@ export interface RoverState extends RoverPose {
 }
 export interface RoverInput {
   throttle: number;
+  /** Positive steers to the watch-camera's screen right. */
   steer: number;
   dt: number;
   paused?: boolean;
@@ -35,11 +36,15 @@ export interface RoverEnvironment {
   radius?: number;
   wheelbase?: number;
   trackWidth?: number;
+  regionCenter?: { x: number; z: number };
+  regionRadius?: number;
 }
 const GROUND_Y = -0.4;
 const MAX_STEERING = 0.42;
-const MAX_SPEED = 5;
-const MAX_LATERAL_SPEED = 1.4;
+const MAX_FORWARD_SPEED = 5;
+const MAX_REVERSE_SPEED = 3;
+const ACCELERATION = 45;
+const BRAKING = 35;
 const DEFAULT_WHEELBASE = 1.7;
 const DEFAULT_TRACK_WIDTH = 1.4;
 const DEFAULT_RADIUS = 0.92;
@@ -97,19 +102,24 @@ function supportState(state: RoverState, environment: RoverEnvironment, wheelbas
   const front = (heights.frontLeft + heights.frontRight) / 2;
   const rear = (heights.rearLeft + heights.rearRight) / 2;
   const y = (front + rear + heights.middleLeft + heights.middleRight) / 4;
+  const flatAtAuthoredRest = state.longitudinalVelocity === 0 && Math.abs(y - GROUND_Y) < 1e-9 &&
+    Math.abs(heights.frontLeft - y) < 1e-9 && Math.abs(heights.frontRight - y) < 1e-9 &&
+    Math.abs(heights.middleLeft - y) < 1e-9 && Math.abs(heights.middleRight - y) < 1e-9 &&
+    Math.abs(heights.rearLeft - y) < 1e-9 && Math.abs(heights.rearRight - y) < 1e-9;
+  const adjustedY = flatAtAuthoredRest ? state.y : y;
   const suspensionTravel = { ...ZERO_SUSPENSION };
   for (const wheel of Object.keys(heights) as (keyof RoverSuspensionTravel)[]) {
     suspensionTravel[wheel] = clamp(heights[wheel] - y, -0.25, 0.25);
   }
   return {
     ...state,
-    y,
+    y: adjustedY,
     groundPitch: clamp(Math.atan2(front - rear, wheelbase), -0.6, 0.6),
     groundRoll: clamp(Math.atan2(right - left, trackWidth), -0.6, 0.6),
     suspensionTravel
   };
 }
-/** Advance one bounded substep frame; S/reverse first brakes forward motion to zero. */
+/** Advance one bounded substep frame with immediate opposing throttle and strong release braking. */
 export function stepRoverDynamics(
   state: RoverState,
   input: RoverInput,
@@ -125,8 +135,8 @@ export function stepRoverDynamics(
     y: clamp(finite(state.y, GROUND_Y), -100, 100),
     z: clamp(finite(state.z, 0), BOUNDS.minZ, BOUNDS.maxZ),
     heading: wrapHeading(finite(state.heading, 0)),
-    longitudinalVelocity: clamp(finite(state.longitudinalVelocity, 0), -MAX_SPEED, MAX_SPEED),
-    lateralVelocity: clamp(finite(state.lateralVelocity, 0), -MAX_LATERAL_SPEED, MAX_LATERAL_SPEED),
+    longitudinalVelocity: clamp(finite(state.longitudinalVelocity, 0), -MAX_REVERSE_SPEED, MAX_FORWARD_SPEED),
+    lateralVelocity: 0,
     steeringAngle: clamp(finite(state.steeringAngle, 0), -MAX_STEERING, MAX_STEERING),
     acceptedWheelTravel: clamp(finite(state.acceptedWheelTravel, 0), -1e12, 1e12),
     groundPitch: clamp(finite(state.groundPitch, 0), -0.6, 0.6),
@@ -146,63 +156,53 @@ export function stepRoverDynamics(
   const maxX = finite(bounds.maxX, BOUNDS.maxX);
   const minZ = finite(bounds.minZ, BOUNDS.minZ);
   const maxZ = finite(bounds.maxZ, BOUNDS.maxZ);
+  const regionCenter = environment.regionCenter;
+  const regionRadius = Math.max(0, environment.regionRadius ?? Infinity);
+  const insideRegion = (x: number, z: number): boolean => !regionCenter ||
+    Math.hypot(x - regionCenter.x, z - regionCenter.z) <= regionRadius;
   let x = current.x;
   let z = current.z;
   let heading = current.heading;
   let longitudinalVelocity = current.longitudinalVelocity;
-  let lateralVelocity = current.lateralVelocity;
   let acceptedWheelTravel = current.acceptedWheelTravel;
   let steeringAngle = current.steeringAngle;
-  const brakesTowardZero = current.longitudinalVelocity * throttle < 0;
   const steps = Math.ceil(dt / SUBSTEP);
   const stepDt = dt / steps;
   for (let i = 0; i < steps; i++) {
     const oldHeading = heading;
-    const targetSteering = steer * MAX_STEERING;
-    steeringAngle = targetSteering + (steeringAngle - targetSteering) * Math.exp(-8 * stepDt);
+    steeringAngle = moveToward(steeringAngle, steer * MAX_STEERING, 12 * stepDt);
+    const targetSpeed = throttle > 0 ? throttle * MAX_FORWARD_SPEED : throttle * MAX_REVERSE_SPEED;
     if (throttle === 0) {
-      longitudinalVelocity = moveToward(longitudinalVelocity * Math.exp(-0.08 * stepDt), 0, 0.015 * stepDt);
-    } else if (longitudinalVelocity * throttle < 0) {
-      // Opposing throttle is brake only; crossing zero cannot start reverse until the next substep.
-      longitudinalVelocity = moveToward(longitudinalVelocity, 0, 5 * Math.abs(throttle) * stepDt);
-      if (Math.abs(longitudinalVelocity) < 1e-5) longitudinalVelocity = 0;
-    } else if (!brakesTowardZero) {
-      const targetSpeed = Math.sign(throttle) * MAX_SPEED;
-      const acceleration = throttle > 0 ? 2.4 : 1.6;
-      longitudinalVelocity = moveToward(longitudinalVelocity, targetSpeed, acceleration * Math.abs(throttle) * stepDt);
+      longitudinalVelocity = moveToward(longitudinalVelocity, 0, BRAKING * stepDt);
+    } else if (longitudinalVelocity === 0 || Math.sign(targetSpeed) !== Math.sign(longitudinalVelocity)) {
+      longitudinalVelocity = targetSpeed;
+    } else {
+      longitudinalVelocity = moveToward(longitudinalVelocity, targetSpeed, ACCELERATION * stepDt);
     }
-    longitudinalVelocity = clamp(longitudinalVelocity, -MAX_SPEED, MAX_SPEED);
-    const slipTarget = clamp(longitudinalVelocity * Math.tan(steeringAngle) * 0.1, -0.4, 0.4);
-    lateralVelocity = clamp(
-      slipTarget + (lateralVelocity - slipTarget) * Math.exp(-4.5 * stepDt),
-      -MAX_LATERAL_SPEED, MAX_LATERAL_SPEED
-    );
-    const yawRate = longitudinalVelocity * Math.tan(steeringAngle) / wheelbase;
+    longitudinalVelocity = clamp(longitudinalVelocity, -MAX_REVERSE_SPEED, MAX_FORWARD_SPEED);
+    const yawRate = -longitudinalVelocity * Math.tan(steeringAngle) / wheelbase;
     heading = wrapHeading(heading + yawRate * stepDt);
     const averageHeading = wrapHeading(oldHeading + wrapHeading(heading - oldHeading) / 2);
     const forwardX = Math.sin(averageHeading);
     const forwardZ = Math.cos(averageHeading);
-    const rightX = Math.cos(averageHeading);
-    const rightZ = -Math.sin(averageHeading);
-    const nextX = x + (forwardX * longitudinalVelocity + rightX * lateralVelocity) * stepDt;
-    const nextZ = z + (forwardZ * longitudinalVelocity + rightZ * lateralVelocity) * stepDt;
+    const nextX = x + forwardX * longitudinalVelocity * stepDt;
+    const nextZ = z + forwardZ * longitudinalVelocity * stepDt;
     const insideBounds = nextX >= minX + radius && nextX <= maxX - radius &&
-      nextZ >= minZ + radius && nextZ <= maxZ - radius;
+      nextZ >= minZ + radius && nextZ <= maxZ - radius && insideRegion(nextX, nextZ);
     const occupiable = insideBounds && (environment.canOccupy?.(nextX, nextZ, radius) ?? true);
     if (!occupiable) {
       longitudinalVelocity = 0;
-      lateralVelocity = 0;
       heading = oldHeading;
       break;
     }
     acceptedWheelTravel = clamp(
-      acceptedWheelTravel + (nextX - x) * forwardX + (nextZ - z) * forwardZ,
+      acceptedWheelTravel + Math.hypot(nextX - x, nextZ - z) * Math.sign(longitudinalVelocity),
       -1e12, 1e12
     );
     x = nextX;
     z = nextZ;
   }
   return supportState({
-    ...current, x, z, heading, longitudinalVelocity, lateralVelocity, steeringAngle, acceptedWheelTravel
+    ...current, x, z, heading, longitudinalVelocity, lateralVelocity: 0, steeringAngle, acceptedWheelTravel
   }, environment, wheelbase, trackWidth);
 }
